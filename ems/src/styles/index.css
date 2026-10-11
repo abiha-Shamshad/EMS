@@ -1,0 +1,117 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/* ------------------------------------------------------------------
+   DESIGN TOKENS - the only place colors, fonts and radii are defined.
+   Values come from Sawera's Figma frames (EMS_Screen_01..07 in
+   design-reference/). Components only use token classes (bg-primary,
+   text-ink, ...) and never hex.
+   ------------------------------------------------------------------ */
+@theme {
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+
+  --color-ink: #15234a; /* headings, labels */
+  --color-ink-body: #1f2a44; /* paragraphs */
+  --color-ink-muted: #5d6b8f; /* secondary text, icons */
+  --color-placeholder: #97a3c2;
+
+  --color-accent: #5247dc; /* purple: "together.", eyebrow, links, checkbox */
+  --color-accent-soft: #e3e9ff;
+  --color-primary: #3478f5; /* Sign in button */
+  --color-primary-hover: #2a67da;
+
+  --color-line: #d6dbf5; /* input borders */
+  --color-line-soft: #e6e9f4; /* dividers, chip borders */
+  --color-outline-strong: #4a5675; /* Google button border */
+
+  --color-canvas: #ffffff;
+  --color-panel-from: #f4f7ff;
+  --color-panel-via: #eff3ff;
+  --color-panel-to: #e9effd;
+  --color-mint: #dcf3ef;
+
+  --color-danger: #c0392b;
+  --color-danger-soft: #fdecea;
+  --color-success: #2fa88a;
+
+  /* Dashboard + app shell (EMS_Screen_07_CEO_Dashboard) */
+  --color-app-bg: #f1f4fb; /* page background behind cards */
+  --color-card: #ffffff;
+  --color-nav-active: #edf1ff; /* active sidebar item */
+  --color-nav-ink: #3c4767; /* sidebar item text */
+  --color-search-bg: #f3f5fa; /* topbar search field */
+
+  --color-success-bg: #e4f6ec;
+  --color-success-text: #1e9e6a;
+  --color-warning-bg: #fdf0d9;
+  --color-warning-text: #bd7714;
+  --color-info-bg: #e8efff;
+  --color-info-text: #2f6fed;
+  --color-purple-bg: #ece8ff;
+  --color-purple-text: #6a5ae0;
+
+  --color-chart-line: #4a6cf7; /* revenue line */
+  --color-chart-grid: #e8ecf6; /* chart gridlines */
+  --color-donut-track: #e9edf6;
+
+  --radius-field: 1rem; /* 16px inputs / buttons / chips */
+  --radius-card: 1rem; /* dashboard cards */
+  --shadow-chip: 0 6px 18px rgb(91 107 196 / 0.1);
+  --shadow-card: 0 10px 30px rgb(31 42 90 / 0.07);
+  --shadow-pop: 0 16px 40px rgb(31 42 90 / 0.14);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink-body);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@keyframes ems-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ems-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes ems-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 90" fill="none" role="img" aria-label="EMS logo">
+  <!-- Left person: blue -->
+  <circle cx="18" cy="28" r="12" fill="#5b9ef7"/>
+  <path d="M4 52c0-7 5-11 14-11s14 4 14 11v32H4z" fill="#5b9ef7"/>
+  <!-- Right person: teal/green -->
+  <circle cx="92" cy="28" r="12" fill="#27c3a6"/>
+  <path d="M78 52c0-7 5-11 14-11s14 4 14 11v32H78z" fill="#27c3a6"/>
+  <!-- Centre person: indigo/dark -->
+  <circle cx="55" cy="14" r="17" fill="#4f46d8"/>
+  <path d="M28 46c0-9 9-14 27-14s27 5 27 14v38H28z" fill="#4f46d8"/>
+</svg>
