@@ -1,0 +1,4287 @@
+[
+  {
+    "id": "API-001",
+    "domain": "System and Authentication",
+    "method": "GET",
+    "path": "/health",
+    "title": "Health and readiness",
+    "auth": "public (private network for details)",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "status": "ready",
+        "checks": {
+          "postgres": "ok",
+          "livekit": "ok",
+          "worker_lag_seconds": 2
+        },
+        "version": "1.0.0"
+      }
+    },
+    "extra": [
+      {
+        "label": "Degraded but serving (media server down)",
+        "status": 200,
+        "body": {
+          "status": "degraded",
+          "checks": {
+            "postgres": "ok",
+            "livekit": "unavailable",
+            "worker_lag_seconds": 3
+          },
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "error": {
+      "status": 503,
+      "body": {
+        "status": "unavailable",
+        "checks": {
+          "postgres": "unavailable"
+        },
+        "version": "1.0.0"
+      }
+    },
+    "statuses": [
+      200,
+      503
+    ]
+  },
+  {
+    "id": "API-002",
+    "domain": "System and Authentication",
+    "method": "POST",
+    "path": "/api/v1/auth/signup",
+    "title": "Create company account",
+    "auth": "public",
+    "request": {
+      "company_name": "Acme Tech",
+      "company_slug": "acme-tech",
+      "country": "PK",
+      "time_zone": "Asia/Karachi",
+      "name": "Imran Qureshi",
+      "email": "imran@acmetech.example",
+      "password": "correct-horse-battery-staple-42"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Company account created.",
+        "data": {
+          "user": {
+            "id": "218ddf51-b83b-5f00-9e99-5e32103a1023",
+            "name": "Imran Qureshi",
+            "email": "imran@acmetech.example"
+          },
+          "org": {
+            "id": "0f8c3a50-4105-5319-b2b1-b252e9c20343",
+            "name": "Acme Tech",
+            "slug": "acme-tech",
+            "setup_state": "account_created"
+          },
+          "membership": {
+            "role": "ceo"
+          },
+          "next_step": "company_setup"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-01T05:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SLUG_TAKEN",
+          "message": "That company address is already taken. Try another.",
+          "retryable": false,
+          "details": {
+            "field": "company_slug"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      409,
+      429
+    ]
+  },
+  {
+    "id": "API-003",
+    "domain": "System and Authentication",
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "title": "Sign in with email and password",
+    "auth": "public",
+    "request": {
+      "email": "imran@acmetech.example",
+      "password": "correct-horse-battery-staple-42",
+      "remember": true
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Signed in.",
+        "data": {
+          "user": {
+            "id": "218ddf51-b83b-5f00-9e99-5e32103a1023",
+            "name": "Imran Qureshi"
+          },
+          "session_expires_at": "2026-11-11T04:00:00Z",
+          "organizations": [
+            {
+              "id": "0f8c3a50-4105-5319-b2b1-b252e9c20343",
+              "name": "Acme Tech",
+              "role": "ceo"
+            }
+          ],
+          "redirect": "/dashboards/ceo"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "INVALID_CREDENTIALS",
+          "message": "Email or password is incorrect.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401,
+      429
+    ]
+  },
+  {
+    "id": "API-004",
+    "domain": "System and Authentication",
+    "method": "POST",
+    "path": "/api/v1/auth/logout",
+    "title": "Sign out",
+    "auth": "session",
+    "request": {},
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "signed_out": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T13:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "You are not signed in.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-005",
+    "domain": "System and Authentication",
+    "method": "POST",
+    "path": "/api/v1/auth/password/forgot",
+    "title": "Request password reset",
+    "auth": "public",
+    "request": {
+      "email": "imran@acmetech.example"
+    },
+    "success": {
+      "status": 202,
+      "body": {
+        "success": true,
+        "message": "If that email has an account, a reset link is on its way.",
+        "data": {
+          "accepted": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 429,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Too many requests. Try again later.",
+          "retryable": true,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      202,
+      429
+    ]
+  },
+  {
+    "id": "API-006",
+    "domain": "System and Authentication",
+    "method": "POST",
+    "path": "/api/v1/auth/password/reset",
+    "title": "Reset password",
+    "auth": "public",
+    "request": {
+      "token": "rst_redacted_example",
+      "new_password": "a-new-long-passphrase-2026"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Password changed. Sign in again.",
+        "data": {
+          "password_changed": true,
+          "sessions_revoked": 2
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:10:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 410,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "RESET_TOKEN_EXPIRED",
+          "message": "This reset link has expired. Request a new one.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400,
+      410
+    ]
+  },
+  {
+    "id": "API-007",
+    "domain": "System and Authentication",
+    "method": "GET",
+    "path": "/api/v1/auth/google/start",
+    "title": "Start Google sign-in",
+    "auth": "public",
+    "request": null,
+    "success": {
+      "status": 302,
+      "body": {
+        "status": 302,
+        "location": "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=<GOOGLE_CLIENT_ID>&scope=openid%20email%20profile&redirect_uri=https%3A%2F%2Fapp.ems.example%2Fapi%2Fv1%2Fauth%2Fgoogle%2Fcallback&state=<random>&nonce=<random>&code_challenge=<S256>&code_challenge_method=S256",
+        "set_cookie": "ems_oauth=<signed state+nonce+verifier>; HttpOnly; Secure; SameSite=Lax; Max-Age=600"
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 503,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "GOOGLE_NOT_CONFIGURED",
+          "message": "Google sign-in is not available. Use email and password.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      302,
+      503
+    ]
+  },
+  {
+    "id": "API-008",
+    "domain": "System and Authentication",
+    "method": "GET",
+    "path": "/api/v1/auth/google/callback",
+    "title": "Complete Google sign-in",
+    "auth": "public",
+    "request": null,
+    "success": {
+      "status": 302,
+      "body": {
+        "status": 302,
+        "location": "/dashboards/ceo",
+        "set_cookie": "ems_session=<token>; HttpOnly; Secure; SameSite=Lax"
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "GOOGLE_ACCOUNT_NOT_LINKED",
+          "message": "No EMS account uses this Google account. Ask your company admin for an invitation.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      302,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-009",
+    "domain": "System and Authentication",
+    "method": "GET",
+    "path": "/api/v1/me",
+    "title": "Current user, companies and permissions",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "user": {
+            "id": "218ddf51-b83b-5f00-9e99-5e32103a1023",
+            "name": "Imran Qureshi",
+            "email": "imran@acmetech.example"
+          },
+          "active_org": {
+            "id": "0f8c3a50-4105-5319-b2b1-b252e9c20343",
+            "name": "Acme Tech",
+            "role": "ceo",
+            "time_zone": "Asia/Karachi",
+            "setup_state": "active"
+          },
+          "permissions": [
+            "room.view_live",
+            "room.self",
+            "hr.manage",
+            "leave.decide",
+            "projects.manage",
+            "crm.manage",
+            "finance.manage",
+            "hunter.use",
+            "rules.manage",
+            "members.manage",
+            "leakage.read",
+            "leakage.resolve",
+            "dashboards.all"
+          ],
+          "dashboard": "ceo"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:00:05Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-010",
+    "domain": "Company and Team",
+    "method": "PATCH",
+    "path": "/api/v1/org",
+    "title": "Company setup",
+    "auth": "session",
+    "request": {
+      "expected_version": 1,
+      "industry": "Software services",
+      "size_band": "11-50",
+      "time_zone": "Asia/Karachi",
+      "work_hours": {
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ],
+        "start": "09:00",
+        "end": "18:00",
+        "late_grace_minutes": 10
+      }
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Company details saved.",
+        "data": {
+          "id": "0f8c3a50-4105-5319-b2b1-b252e9c20343",
+          "setup_state": "company_setup_done",
+          "version": 2,
+          "next_step": "invite_team"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-01T05:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Company settings were changed by someone else. Reload and try again.",
+          "retryable": false,
+          "details": {
+            "current_version": 2
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400,
+      403,
+      409
+    ]
+  },
+  {
+    "id": "API-011",
+    "domain": "Company and Team",
+    "method": "POST",
+    "path": "/api/v1/invitations",
+    "title": "Invite team members",
+    "auth": "session",
+    "request": {
+      "invites": [
+        {
+          "email": "bilal@acmetech.example",
+          "role": "employee"
+        },
+        {
+          "email": "hina@acmetech.example",
+          "role": "hr"
+        }
+      ],
+      "message": "Hi! Join our company workspace on EMS to collaborate with the team."
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "2 invitations created.",
+        "data": {
+          "results": [
+            {
+              "email": "bilal@acmetech.example",
+              "status": "invited",
+              "invitation_id": "94ffbb52-3771-5b03-990c-2084c00093c3",
+              "expires_at": "2026-10-08T05:10:00Z"
+            },
+            {
+              "email": "hina@acmetech.example",
+              "status": "invited",
+              "invitation_id": "455e9bb7-b8ae-5432-a822-841a15291ca7",
+              "expires_at": "2026-10-08T05:10:00Z"
+            }
+          ],
+          "email_delivery": "not_configured",
+          "copy_links": true,
+          "org_setup_state": "team_invited"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-01T05:10:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Check the highlighted rows.",
+          "retryable": false,
+          "details": {
+            "fields": {
+              "invites[1].role": "Role 'ceo' cannot be invited; there is one CEO per company."
+            }
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-012",
+    "domain": "Company and Team",
+    "method": "POST",
+    "path": "/api/v1/invitations/accept",
+    "title": "Accept invitation",
+    "auth": "session (new or existing user)",
+    "request": {
+      "token": "inv_redacted_example",
+      "name": "Bilal Ahmed",
+      "password": "bilal-long-passphrase-01"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Welcome to Acme Tech.",
+        "data": {
+          "org": {
+            "id": "0f8c3a50-4105-5319-b2b1-b252e9c20343",
+            "name": "Acme Tech"
+          },
+          "membership": {
+            "role": "employee"
+          },
+          "next_step": "install_extension"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-02T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "INVITATION_EMAIL_MISMATCH",
+          "message": "This invitation was sent to a different email address.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      410
+    ]
+  },
+  {
+    "id": "API-013",
+    "domain": "Company and Team",
+    "method": "GET",
+    "path": "/api/v1/members",
+    "title": "List members",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "user_id": "218ddf51-b83b-5f00-9e99-5e32103a1023",
+              "name": "Imran Qureshi",
+              "role": "ceo",
+              "title": "Chief Executive",
+              "department": "Leadership",
+              "status": "active"
+            },
+            {
+              "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+              "name": "Bilal Ahmed",
+              "role": "employee",
+              "title": "Backend Developer",
+              "department": "Engineering",
+              "status": "active",
+              "manager_id": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f"
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-014",
+    "domain": "Company and Team",
+    "method": "PATCH",
+    "path": "/api/v1/members/{userId}",
+    "title": "Update member role or details",
+    "auth": "session",
+    "request": {
+      "expected_version": 1,
+      "role": "manager",
+      "department": "Engineering"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Member updated.",
+        "data": {
+          "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+          "role": "manager",
+          "department": "Engineering",
+          "version": 2
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ONE_CEO_ONLY",
+          "message": "A company has exactly one CEO. Transfer the CEO role from the CEO's own settings.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      404,
+      409,
+      422
+    ]
+  },
+  {
+    "id": "API-015",
+    "domain": "Company and Team",
+    "method": "POST",
+    "path": "/api/v1/members/{userId}/deactivate",
+    "title": "Deactivate member",
+    "auth": "session",
+    "request": {
+      "reassign_to": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f",
+      "reason": "Contract ended"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+          "status": "deactivated",
+          "tasks_reassigned": 6,
+          "deals_reassigned": 0,
+          "work_session_closed": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T12:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "CANNOT_DEACTIVATE_CEO",
+          "message": "The CEO cannot be deactivated.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      404,
+      422
+    ]
+  },
+  {
+    "id": "API-016",
+    "domain": "Company and Team",
+    "method": "GET",
+    "path": "/api/v1/roles/permissions",
+    "title": "Permissions matrix",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "roles": [
+            "ceo",
+            "cto",
+            "cfo",
+            "coo",
+            "hr",
+            "manager",
+            "employee"
+          ],
+          "matrix": {
+            "room.view_live": [
+              "ceo",
+              "coo"
+            ],
+            "hr.manage": [
+              "ceo",
+              "coo",
+              "hr"
+            ],
+            "leave.decide": [
+              "ceo",
+              "hr",
+              "manager"
+            ],
+            "finance.manage": [
+              "ceo",
+              "cfo"
+            ],
+            "crm.manage": [
+              "ceo",
+              "coo",
+              "manager"
+            ],
+            "rules.manage": [
+              "ceo",
+              "coo",
+              "cto"
+            ]
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-017",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/consent",
+    "title": "Record monitoring consent",
+    "auth": "session",
+    "request": {
+      "policy_version": 1,
+      "accept": true
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Consent recorded.",
+        "data": {
+          "policy_version": 1,
+          "consented_at": "2026-10-02T06:05:00Z",
+          "covers": [
+            "presence",
+            "idle_state",
+            "current_task",
+            "live_screen_while_checked_in"
+          ],
+          "excludes": [
+            "recording",
+            "keystrokes",
+            "browsing_history",
+            "webcam",
+            "microphone"
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-02T06:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "POLICY_VERSION_OUTDATED",
+          "message": "A newer monitoring notice exists. Read version 2 before accepting.",
+          "retryable": false,
+          "details": {
+            "current_version": 2
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409
+    ]
+  },
+  {
+    "id": "API-018",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/check-in",
+    "title": "Check in",
+    "auth": "session or extension",
+    "request": {
+      "device": {
+        "kind": "chrome_extension",
+        "extension_version": "1.0.0"
+      },
+      "task_id": "ab69355b-311b-59bc-b64e-306dd5c5b308"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Checked in at 9:02 AM.",
+        "data": {
+          "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+          "started_at": "2026-10-12T04:02:00Z",
+          "minutes_late": 0,
+          "presence": "active",
+          "extension_token": "ext_redacted_example",
+          "heartbeat_seconds": 30,
+          "streaming_required": true,
+          "next": "start_screen_share"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:02:00Z"
+        }
+      }
+    },
+    "extra": [
+      {
+        "label": "Repeat check-in while a session is open",
+        "status": 200,
+        "body": {
+          "success": true,
+          "data": {
+            "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+            "started_at": "2026-10-12T04:02:00Z",
+            "presence": "active",
+            "already_open": true
+          },
+          "meta": {
+            "api_version": "v1",
+            "request_id": "req_7f3a9c21",
+            "timestamp": "2026-10-12T04:05:00Z"
+          }
+        }
+      }
+    ],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ON_APPROVED_LEAVE",
+          "message": "You are on approved leave today. Ask HR to cancel the leave before checking in.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      200,
+      403,
+      423
+    ]
+  },
+  {
+    "id": "API-019",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/heartbeat",
+    "title": "Presence heartbeat",
+    "auth": "extension",
+    "request": {
+      "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+      "sent_at": "2026-10-12T05:30:00Z",
+      "idle_state": "active",
+      "streaming": true,
+      "task_id": "ab69355b-311b-59bc-b64e-306dd5c5b308"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "presence": "active",
+          "server_time": "2026-10-12T05:30:01Z",
+          "next_heartbeat_seconds": 30,
+          "pending_break_decision": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T05:30:01Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SESSION_CLOSED",
+          "message": "Your work session has ended. Check in again to continue.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401,
+      409
+    ]
+  },
+  {
+    "id": "API-020",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/check-out",
+    "title": "Check out",
+    "auth": "session or extension",
+    "request": {
+      "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+      "note": "Auth API done, starting tests tomorrow"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Checked out. Good work today.",
+        "data": {
+          "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+          "started_at": "2026-10-12T04:02:00Z",
+          "ended_at": "2026-10-12T13:05:00Z",
+          "totals_minutes": {
+            "active": 412,
+            "idle": 38,
+            "on_break": 45,
+            "offline": 48
+          },
+          "time_entries_created": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T13:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NO_OPEN_SESSION",
+          "message": "You are not checked in.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409
+    ]
+  },
+  {
+    "id": "API-021",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/breaks",
+    "title": "Request break",
+    "auth": "session or extension",
+    "request": {
+      "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4",
+      "kind": "lunch",
+      "minutes": 45
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Lunch break started. Screen sharing paused.",
+        "data": {
+          "break_id": "05f3ce82-b1a0-5c37-8eff-2fc66eb26688",
+          "status": "active",
+          "started_at": "2026-10-12T08:00:00Z",
+          "approval": "auto_approved_by_policy",
+          "stream_paused": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T08:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "BREAK_ALREADY_ACTIVE",
+          "message": "You already have an active break.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      409
+    ]
+  },
+  {
+    "id": "API-022",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/breaks/{breakId}/decision",
+    "title": "Approve or reject break",
+    "auth": "session",
+    "request": {
+      "decision": "approved"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "break_id": "d59a0b41-7ef1-5c69-8f5e-44839c2df18c",
+          "status": "active",
+          "started_at": "2026-10-12T10:00:00Z",
+          "decided_by": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T10:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ALREADY_DECIDED",
+          "message": "This break request was already decided.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      409
+    ]
+  },
+  {
+    "id": "API-023",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/breaks/{breakId}/end",
+    "title": "End break",
+    "auth": "session or extension",
+    "request": {},
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "break_id": "05f3ce82-b1a0-5c37-8eff-2fc66eb26688",
+          "status": "ended",
+          "minutes": 45,
+          "over_allowance_minutes": 0,
+          "stream_resume": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T08:45:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Break not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-024",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/stream/publish-token",
+    "title": "Get screen-share publish token",
+    "auth": "extension",
+    "request": {
+      "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "livekit_url": "wss://media.ems.example",
+          "token": "eyJ...redacted",
+          "room": "ems-0f8c3a50-4105-5319-b2b1-b252e9c20343-289b359a-7306-54e2-a6c2-1346e443935a",
+          "identity": "employee:289b359a-7306-54e2-a6c2-1346e443935a",
+          "grants": {
+            "can_publish": true,
+            "can_subscribe": false,
+            "can_publish_data": false,
+            "can_publish_sources": [
+              "screen_share"
+            ]
+          },
+          "expires_in_seconds": 600,
+          "video": {
+            "max_resolution": "1280x720",
+            "max_fps": 5
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T04:02:30Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "CONSENT_REQUIRED",
+          "message": "Accept the monitoring notice before sharing your screen.",
+          "retryable": false,
+          "details": {
+            "policy_version": 1
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      409,
+      503
+    ]
+  },
+  {
+    "id": "API-025",
+    "domain": "Live Employee Room",
+    "method": "GET",
+    "path": "/api/v1/room/live",
+    "title": "CEO live grid",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "as_of": "2026-10-12T05:30:05Z",
+          "counts": {
+            "checked_in": 12,
+            "active": 9,
+            "idle": 1,
+            "on_break": 2,
+            "offline": 0,
+            "not_checked_in": 2,
+            "on_leave": 1
+          },
+          "items": [
+            {
+              "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+              "name": "Bilal Ahmed",
+              "department": "Engineering",
+              "presence": "active",
+              "since": "2026-10-12T04:02:00Z",
+              "current_task": {
+                "id": "ab69355b-311b-59bc-b64e-306dd5c5b308",
+                "title": "Auth API"
+              },
+              "stream": "live",
+              "minutes_late": 0
+            },
+            {
+              "user_id": "6e857032-0821-59a4-9317-049c2b781524",
+              "name": "Ayesha Noor",
+              "department": "Design",
+              "presence": "on_break",
+              "since": "2026-10-12T05:20:00Z",
+              "current_task": null,
+              "stream": "paused",
+              "minutes_late": 12
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T05:30:05Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "Only the CEO and COO can open the live room.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-026",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/stream/view",
+    "title": "Open a live screen view",
+    "auth": "session",
+    "request": {
+      "subject_user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+      "reason": "Daily stand-up check"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "data": {
+          "view_id": "10068f45-9612-56fe-8474-19eefba55377",
+          "livekit_url": "wss://media.ems.example",
+          "token": "eyJ...redacted",
+          "room": "ems-0f8c3a50-4105-5319-b2b1-b252e9c20343-289b359a-7306-54e2-a6c2-1346e443935a",
+          "grants": {
+            "can_publish": false,
+            "can_subscribe": true,
+            "can_publish_data": false
+          },
+          "expires_in_seconds": 900,
+          "subject_notified": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T05:31:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "STREAM_NOT_LIVE",
+          "message": "Bilal is not sharing right now (on break or not checked in).",
+          "retryable": false,
+          "details": {
+            "presence": "on_break"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      403,
+      409
+    ]
+  },
+  {
+    "id": "API-027",
+    "domain": "Live Employee Room",
+    "method": "POST",
+    "path": "/api/v1/room/stream/view/{viewId}/end",
+    "title": "Close a live view",
+    "auth": "session",
+    "request": {},
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "view_id": "10068f45-9612-56fe-8474-19eefba55377",
+          "started_at": "2026-10-12T05:31:00Z",
+          "ended_at": "2026-10-12T05:34:20Z",
+          "seconds": 200
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T05:34:20Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "View not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-028",
+    "domain": "Live Employee Room",
+    "method": "GET",
+    "path": "/api/v1/room/my-viewers",
+    "title": "Who viewed my screen",
+    "auth": "session or extension",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "view_id": "10068f45-9612-56fe-8474-19eefba55377",
+              "viewer": "Imran Qureshi",
+              "reason": "Daily stand-up check",
+              "started_at": "2026-10-12T05:31:00Z",
+              "seconds": 200
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-029",
+    "domain": "People and HR",
+    "method": "GET",
+    "path": "/api/v1/employees",
+    "title": "Employee directory",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+              "name": "Bilal Ahmed",
+              "title": "Backend Developer",
+              "department": "Engineering",
+              "manager": "Usman Tariq",
+              "today": {
+                "state": "checked_in",
+                "since": "2026-10-12T04:02:00Z",
+                "minutes_late": 0
+              },
+              "leave_balance_days": {
+                "annual": 14,
+                "casual": 6
+              }
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T05:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "You can only see your own profile.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-030",
+    "domain": "People and HR",
+    "method": "GET",
+    "path": "/api/v1/attendance",
+    "title": "Attendance and timesheets",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "user_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+          "days": [
+            {
+              "date": "2026-10-12",
+              "check_in": "09:02",
+              "check_out": "18:05",
+              "minutes_late": 0,
+              "active": 412,
+              "idle": 38,
+              "on_break": 45,
+              "offline": 48,
+              "status": "present"
+            },
+            {
+              "date": "2026-10-13",
+              "status": "not_checked_in"
+            }
+          ],
+          "totals": {
+            "present_days": 1,
+            "late_days": 0,
+            "active_minutes": 412
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-13T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Choose a range of at most 62 days.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-031",
+    "domain": "People and HR",
+    "method": "POST",
+    "path": "/api/v1/leave-requests",
+    "title": "Request leave",
+    "auth": "session",
+    "request": {
+      "kind": "annual",
+      "start_date": "2026-10-20",
+      "end_date": "2026-10-22",
+      "reason": "Family event"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Leave request sent to Imran Qureshi.",
+        "data": {
+          "request_id": "926408eb-ff9a-5b9b-9bb8-002245f807af",
+          "status": "pending",
+          "days": 3,
+          "approver": "Imran Qureshi",
+          "balance_after_approval": {
+            "annual": 11
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "LEAVE_OVERLAP",
+          "message": "You already have leave requested or approved for part of these dates.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      409,
+      422
+    ]
+  },
+  {
+    "id": "API-032",
+    "domain": "People and HR",
+    "method": "GET",
+    "path": "/api/v1/leave-requests",
+    "title": "List leave requests",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "request_id": "926408eb-ff9a-5b9b-9bb8-002245f807af",
+              "employee": "Bilal Ahmed",
+              "kind": "annual",
+              "start_date": "2026-10-20",
+              "end_date": "2026-10-22",
+              "days": 3,
+              "status": "pending",
+              "team_on_leave_same_days": 1
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T07:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-033",
+    "domain": "People and HR",
+    "method": "POST",
+    "path": "/api/v1/leave-requests/{requestId}/decision",
+    "title": "Approve or reject leave",
+    "auth": "session",
+    "request": {
+      "expected_version": 1,
+      "decision": "approved",
+      "note": "Enjoy"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "request_id": "926408eb-ff9a-5b9b-9bb8-002245f807af",
+          "status": "approved",
+          "decided_by": "Imran Qureshi",
+          "decided_at": "2026-10-12T07:05:00Z",
+          "version": 2
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T07:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "This request was already decided.",
+          "retryable": false,
+          "details": {
+            "current_status": "approved"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      409
+    ]
+  },
+  {
+    "id": "API-034",
+    "domain": "People and HR",
+    "method": "GET",
+    "path": "/api/v1/hr/reports/daily",
+    "title": "Daily and weekly HR report",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "date": "2026-10-12",
+          "headcount": 15,
+          "present": 12,
+          "on_leave": 1,
+          "absent_unexplained": 2,
+          "late": [
+            {
+              "name": "Ayesha Noor",
+              "minutes": 12
+            }
+          ],
+          "idle_over_threshold": [
+            {
+              "name": "Ayesha Noor",
+              "idle_minutes": 74
+            }
+          ],
+          "break_over_allowance": [],
+          "active_minutes_total": 4380,
+          "notes": "Idle time is a review signal, not a performance score."
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T19:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "Only HR and leadership can view company reports.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-035",
+    "domain": "People and HR",
+    "method": "POST",
+    "path": "/api/v1/hr-agent/ask",
+    "title": "Ask the HR Agent",
+    "auth": "session",
+    "request": {
+      "question": "Who is on leave today?"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "intent": "who_on_leave",
+          "answered": true,
+          "text": "1 on leave on 2026-10-12: Hina Shah (annual)",
+          "data": [
+            {
+              "user_id": "f1827736-f757-56f9-b2ba-d20bf79ec95a",
+              "name": "Hina Shah",
+              "kind": "annual",
+              "request_id": "bb220294-19f7-5f0d-9c48-e5193175adff"
+            }
+          ],
+          "sources": [
+            "bb220294-19f7-5f0d-9c48-e5193175adff"
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [
+      {
+        "label": "Question outside the agent's knowledge (never guessed)",
+        "status": 200,
+        "body": {
+          "success": true,
+          "data": {
+            "intent": "unknown",
+            "answered": false,
+            "text": "I can't answer that from EMS records. I can answer: Who is on leave today?; Which leave requests are pending?; Who came late today?; Who is online now?; Work summary for <name> yesterday; What is the leave policy?",
+            "data": [],
+            "sources": []
+          },
+          "meta": {
+            "api_version": "v1",
+            "request_id": "req_7f3a9c21",
+            "timestamp": "2026-10-12T06:00:00Z"
+          }
+        }
+      }
+    ],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Ask a question of 3 to 300 characters.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400
+    ]
+  },
+  {
+    "id": "API-036",
+    "domain": "People and HR",
+    "method": "GET",
+    "path": "/api/v1/hr-agent/policies",
+    "title": "List HR policies",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "topic": "leave",
+              "version": 2,
+              "text": "18 annual days and 8 casual days per year. Requests 3+ days need 7 days' notice.",
+              "published_at": "2026-10-01T06:00:00Z"
+            },
+            {
+              "topic": "attendance",
+              "version": 1,
+              "text": "Work hours 09:00-18:00, 10 minutes grace. Lunch 45 minutes.",
+              "published_at": "2026-10-01T06:00:00Z"
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-037",
+    "domain": "People and HR",
+    "method": "PUT",
+    "path": "/api/v1/hr-agent/policies/{topic}",
+    "title": "Publish HR policy",
+    "auth": "session",
+    "request": {
+      "expected_version": 1,
+      "text": "Work hours 09:00-18:00, 15 minutes grace. Lunch 45 minutes.",
+      "rules": {
+        "late_grace_minutes": 15,
+        "daily_break_allowance_minutes": 60
+      }
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Attendance policy v2 published.",
+        "data": {
+          "topic": "attendance",
+          "version": 2,
+          "published_at": "2026-10-12T07:00:00Z"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T07:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "Someone published a newer version. Reload first.",
+          "retryable": false,
+          "details": {
+            "current_version": 2
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403,
+      409
+    ]
+  },
+  {
+    "id": "API-038",
+    "domain": "Projects and Tasks",
+    "method": "GET",
+    "path": "/api/v1/projects",
+    "title": "Projects dashboard and list",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "cb177fe3-6957-56c8-88b8-b33a4a0d61c3",
+              "name": "Northwind website",
+              "client": "Northwind Digital",
+              "status": "active",
+              "billing_type": "fixed",
+              "progress_pct": 40,
+              "tasks": {
+                "todo": 6,
+                "active": 3,
+                "review": 1,
+                "done": 7
+              },
+              "overdue": 1,
+              "budget": {
+                "amount": "5000.00",
+                "cost_to_date": "1820.00",
+                "currency": "USD",
+                "ratio": "0.36"
+              }
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-039",
+    "domain": "Projects and Tasks",
+    "method": "POST",
+    "path": "/api/v1/projects",
+    "title": "Create project",
+    "auth": "session",
+    "request": {
+      "name": "Contoso support",
+      "client_id": "6cb07699-9f2f-5be6-822c-80e73d859c08",
+      "billing_type": "hourly",
+      "hourly_rate": "40.00",
+      "currency": "USD",
+      "owner_id": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Project created.",
+        "data": {
+          "id": "59cf8f13-d5aa-5fc6-a48b-96633950e42e",
+          "name": "Contoso support",
+          "status": "planned",
+          "billing_type": "hourly",
+          "version": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:10:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Hourly projects need an hourly rate and currency.",
+          "retryable": false,
+          "details": {
+            "fields": {
+              "hourly_rate": "Required for hourly billing."
+            }
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-040",
+    "domain": "Projects and Tasks",
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/board",
+    "title": "Project details and Kanban",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "project": {
+            "id": "cb177fe3-6957-56c8-88b8-b33a4a0d61c3",
+            "name": "Northwind website",
+            "client": "Northwind Digital"
+          },
+          "columns": {
+            "todo": [
+              {
+                "id": "cf2a580b-afba-595c-bf03-0450564fbc0e",
+                "title": "SEO audit",
+                "assignee": "Ayesha Noor",
+                "due_at": "2026-10-16T13:00:00Z",
+                "position": 1,
+                "version": 1
+              }
+            ],
+            "active": [
+              {
+                "id": "ab69355b-311b-59bc-b64e-306dd5c5b308",
+                "title": "Auth API",
+                "assignee": "Bilal Ahmed",
+                "due_at": "2026-10-12T13:00:00Z",
+                "position": 1,
+                "version": 3,
+                "minutes_logged": 300
+              }
+            ],
+            "review": [],
+            "done": []
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Project not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-041",
+    "domain": "Projects and Tasks",
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/tasks",
+    "title": "Create task",
+    "auth": "session",
+    "request": {
+      "title": "Payment page",
+      "assignee_id": "289b359a-7306-54e2-a6c2-1346e443935a",
+      "due_at": "2026-10-15T13:00:00Z",
+      "estimate_minutes": 480,
+      "billable": true
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Task created.",
+        "data": {
+          "id": "b0915baf-4b35-57f3-9ed5-869788ad57b8",
+          "status": "todo",
+          "position": 2,
+          "version": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:20:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ASSIGNEE_NOT_MEMBER",
+          "message": "The assignee is not an active member of this company.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      422
+    ]
+  },
+  {
+    "id": "API-042",
+    "domain": "Projects and Tasks",
+    "method": "PATCH",
+    "path": "/api/v1/tasks/{taskId}",
+    "title": "Edit task",
+    "auth": "session",
+    "request": {
+      "expected_version": 3,
+      "due_at": "2026-10-13T13:00:00Z"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "ab69355b-311b-59bc-b64e-306dd5c5b308",
+          "due_at": "2026-10-13T13:00:00Z",
+          "version": 4
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T07:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VERSION_CONFLICT",
+          "message": "This task was changed by someone else.",
+          "retryable": false,
+          "details": {
+            "current_version": 4
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409
+    ]
+  },
+  {
+    "id": "API-043",
+    "domain": "Projects and Tasks",
+    "method": "POST",
+    "path": "/api/v1/tasks/{taskId}/move",
+    "title": "Move task on the board",
+    "auth": "session",
+    "request": {
+      "expected_version": 4,
+      "to_status": "review",
+      "position": 1
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "ab69355b-311b-59bc-b64e-306dd5c5b308",
+          "status": "review",
+          "position": 1,
+          "version": 5
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T12:30:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "INVALID_TRANSITION",
+          "message": "Tasks move to Done only from Review.",
+          "retryable": false,
+          "details": {
+            "from": "active",
+            "to": "done",
+            "allowed": [
+              "todo",
+              "review"
+            ]
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409,
+      422
+    ]
+  },
+  {
+    "id": "API-044",
+    "domain": "Projects and Tasks",
+    "method": "POST",
+    "path": "/api/v1/tasks/{taskId}/time-entries",
+    "title": "Log time manually",
+    "auth": "session",
+    "request": {
+      "started_at": "2026-10-12T10:00:00Z",
+      "minutes": 60,
+      "billable": true,
+      "note": "Client call"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "data": {
+          "time_entry_id": "39143e8e-6c52-5b21-be94-c28992020906",
+          "source": "manual",
+          "minutes": 60,
+          "billable": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T11:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "TIME_OVERLAPS_SESSION",
+          "message": "This time overlaps your Room session, which already counted it.",
+          "retryable": false,
+          "details": {
+            "session_id": "7cda7a88-5bef-558b-b9a9-f8eab5a023c4"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      409
+    ]
+  },
+  {
+    "id": "API-045",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/contacts",
+    "title": "Create contact or lead",
+    "auth": "session",
+    "request": {
+      "name": "Ali Raza",
+      "email": "ali@northwind.example",
+      "phone": "+923001234567",
+      "company": {
+        "name": "Northwind Digital",
+        "domain": "northwind.example"
+      },
+      "source": "referral"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Lead added.",
+        "data": {
+          "id": "f8da887a-e1b4-5f8c-9b96-ad4ffd1b91bc",
+          "lifecycle_stage": "lead",
+          "company_id": "1c8ed2b8-d832-57d0-9421-7e63be760862",
+          "owner": "Usman Tariq",
+          "version": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-09-20T06:00:00Z"
+        }
+      }
+    },
+    "extra": [
+      {
+        "label": "Duplicate email",
+        "status": 200,
+        "body": {
+          "success": true,
+          "data": {
+            "id": "f8da887a-e1b4-5f8c-9b96-ad4ffd1b91bc",
+            "lifecycle_stage": "lead",
+            "already_exists": true
+          },
+          "meta": {
+            "api_version": "v1",
+            "request_id": "req_7f3a9c21",
+            "timestamp": "2026-09-21T06:00:00Z"
+          }
+        }
+      }
+    ],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SUPPRESSED_CONTACT",
+          "message": "This email asked not to be contacted. It cannot be added as a lead.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      200,
+      400,
+      422
+    ]
+  },
+  {
+    "id": "API-046",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/contacts/search",
+    "title": "Search contacts",
+    "auth": "session",
+    "request": {
+      "query": "northwind",
+      "lifecycle_stage": [
+        "lead",
+        "qualified",
+        "opportunity"
+      ],
+      "limit": 25,
+      "cursor": null
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "f8da887a-e1b4-5f8c-9b96-ad4ffd1b91bc",
+              "name": "Ali Raza",
+              "company": "Northwind Digital",
+              "lifecycle_stage": "opportunity",
+              "owner": "Usman Tariq",
+              "last_activity_at": "2026-09-28T07:00:00Z"
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Search text must be at least 2 characters.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400
+    ]
+  },
+  {
+    "id": "API-047",
+    "domain": "CRM and Client Lifecycle",
+    "method": "GET",
+    "path": "/api/v1/contacts/{contactId}",
+    "title": "Contact and lead details",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "f8da887a-e1b4-5f8c-9b96-ad4ffd1b91bc",
+          "name": "Ali Raza",
+          "email": "ali@northwind.example",
+          "company": {
+            "id": "1c8ed2b8-d832-57d0-9421-7e63be760862",
+            "name": "Northwind Digital"
+          },
+          "lifecycle_stage": "customer",
+          "deals": [
+            {
+              "id": "fa91f4cf-aa79-5720-86ae-21324ff158ea",
+              "title": "Website rebuild",
+              "stage": "won",
+              "amount": "5000.00",
+              "currency": "USD"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "meeting",
+              "note": "Scope workshop",
+              "occurred_at": "2026-09-28T07:00:00Z",
+              "actor": "Usman Tariq"
+            }
+          ],
+          "related": [
+            {
+              "kind": "project",
+              "label": "Northwind website",
+              "via": [
+                "contact_of",
+                "originated_from",
+                "billed_by"
+              ]
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Contact not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-048",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/deals",
+    "title": "Create deal",
+    "auth": "session",
+    "request": {
+      "contact_id": "f8da887a-e1b4-5f8c-9b96-ad4ffd1b91bc",
+      "title": "Website rebuild",
+      "amount": "5000.00",
+      "currency": "USD",
+      "expected_close": "2026-10-10",
+      "owner_id": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Deal created.",
+        "data": {
+          "id": "fa91f4cf-aa79-5720-86ae-21324ff158ea",
+          "stage": "new",
+          "version": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-09-20T06:10:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Amount must be zero or more.",
+          "retryable": false,
+          "details": {
+            "fields": {
+              "amount": ">= 0"
+            }
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-049",
+    "domain": "CRM and Client Lifecycle",
+    "method": "GET",
+    "path": "/api/v1/deals/pipeline",
+    "title": "Sales pipeline board",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "currency": "USD",
+          "stages": [
+            {
+              "stage": "new",
+              "count": 4,
+              "amount": "12000.00"
+            },
+            {
+              "stage": "qualified",
+              "count": 3,
+              "amount": "9500.00"
+            },
+            {
+              "stage": "proposal",
+              "count": 2,
+              "amount": "8000.00"
+            },
+            {
+              "stage": "negotiation",
+              "count": 1,
+              "amount": "6000.00"
+            }
+          ],
+          "weighted_open": "11775.00",
+          "won_this_month": {
+            "count": 1,
+            "amount": "5000.00"
+          },
+          "stale_count": 2
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "CURRENCY_REQUIRED",
+          "message": "Choose a currency; deals exist in USD and PKR.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400
+    ]
+  },
+  {
+    "id": "API-050",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/deals/{dealId}/stage",
+    "title": "Move deal stage",
+    "auth": "session",
+    "request": {
+      "expected_version": 3,
+      "to_stage": "negotiation"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "fa91f4cf-aa79-5720-86ae-21324ff158ea",
+          "stage": "negotiation",
+          "version": 4
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-02T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "INVALID_TRANSITION",
+          "message": "Use 'Mark as won' to win a deal.",
+          "retryable": false,
+          "details": {
+            "to": "won",
+            "use": "/api/v1/deals/{dealId}/win"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409,
+      422
+    ]
+  },
+  {
+    "id": "API-051",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/deals/{dealId}/win",
+    "title": "Win deal and start client lifecycle",
+    "auth": "session",
+    "request": {
+      "expected_version": 4,
+      "project": {
+        "name": "Northwind website",
+        "billing_type": "fixed",
+        "budget_amount": "5000.00",
+        "owner_id": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f",
+        "template": "website_standard"
+      },
+      "renewal_date": "2027-10-10"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "message": "Deal won. Client and project created.",
+        "data": {
+          "deal": {
+            "id": "fa91f4cf-aa79-5720-86ae-21324ff158ea",
+            "stage": "won",
+            "won_at": "2026-10-03T06:00:00Z"
+          },
+          "client": {
+            "id": "6b39c218-ae79-5c7e-b4ca-878c3c7f0e24",
+            "status": "onboarding"
+          },
+          "project": {
+            "id": "cb177fe3-6957-56c8-88b8-b33a4a0d61c3",
+            "status": "planned",
+            "tasks_created": 12
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-03T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ALREADY_WON",
+          "message": "This deal is already won.",
+          "retryable": false,
+          "details": {
+            "client_id": "6b39c218-ae79-5c7e-b4ca-878c3c7f0e24"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      409,
+      422
+    ]
+  },
+  {
+    "id": "API-052",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/activities",
+    "title": "Log activity",
+    "auth": "session",
+    "request": {
+      "entity_type": "deal",
+      "entity_id": "fa91f4cf-aa79-5720-86ae-21324ff158ea",
+      "kind": "call",
+      "note": "Agreed payment terms",
+      "occurred_at": "2026-10-02T05:30:00Z"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "e48de246-ca83-5193-8f7d-eb498df178b6",
+          "entity_type": "deal",
+          "entity_id": "fa91f4cf-aa79-5720-86ae-21324ff158ea"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-02T05:31:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Activity time cannot be in the future.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      404
+    ]
+  },
+  {
+    "id": "API-053",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/invoices",
+    "title": "Record invoice",
+    "auth": "session",
+    "request": {
+      "client_id": "6b39c218-ae79-5c7e-b4ca-878c3c7f0e24",
+      "project_id": "cb177fe3-6957-56c8-88b8-b33a4a0d61c3",
+      "number": "INV-2026-1048",
+      "amount": "2500.00",
+      "currency": "USD",
+      "issued_on": "2026-10-05",
+      "due_on": "2026-10-19",
+      "time_entry_ids": []
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Invoice INV-2026-1048 recorded.",
+        "data": {
+          "id": "a16f7130-ffc6-5dc6-99c0-05a9af40850c",
+          "status": "sent",
+          "outstanding": "2500.00"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-05T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "INVOICE_NUMBER_TAKEN",
+          "message": "Invoice number INV-2026-1048 already exists.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      409
+    ]
+  },
+  {
+    "id": "API-054",
+    "domain": "CRM and Client Lifecycle",
+    "method": "POST",
+    "path": "/api/v1/invoices/{invoiceId}/payments",
+    "title": "Record payment",
+    "auth": "session",
+    "request": {
+      "amount": "2500.00",
+      "received_on": "2026-10-18",
+      "method": "bank_transfer"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "data": {
+          "payment_id": "c1254628-c06c-5084-b8c5-bae99416d450",
+          "invoice_status": "paid",
+          "outstanding": "0.00"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-18T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "OVERPAYMENT",
+          "message": "Payment exceeds the outstanding amount of 2500.00 USD.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      422
+    ]
+  },
+  {
+    "id": "API-055",
+    "domain": "Lead Hunter",
+    "method": "POST",
+    "path": "/api/v1/hunts",
+    "title": "Start a hunt",
+    "auth": "session",
+    "request": {
+      "name": "Lahore marketing agencies",
+      "seeds": {
+        "domains": [
+          "brightpixel.example",
+          "adsmiths.example",
+          "northwind.example"
+        ]
+      },
+      "icp": {
+        "industry_keywords": [
+          "marketing agency",
+          "digital agency"
+        ],
+        "countries": [
+          "PK"
+        ],
+        "tech": [
+          "wordpress",
+          "shopify"
+        ],
+        "min_team_size": 10
+      },
+      "max_pages_per_domain": 5
+    },
+    "success": {
+      "status": 202,
+      "body": {
+        "success": true,
+        "message": "Hunt started.",
+        "data": {
+          "hunt_id": "a5c53104-0195-532f-9cb5-21bb085d220d",
+          "status": "queued",
+          "domains": 3,
+          "estimated_minutes": 2
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SOURCE_NOT_ALLOWED",
+          "message": "linkedin.com cannot be crawled. Use company websites you are allowed to visit.",
+          "retryable": false,
+          "details": {
+            "domain": "linkedin.com"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      202,
+      400,
+      422
+    ]
+  },
+  {
+    "id": "API-056",
+    "domain": "Lead Hunter",
+    "method": "GET",
+    "path": "/api/v1/hunts/{huntId}",
+    "title": "Hunt status",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "hunt_id": "a5c53104-0195-532f-9cb5-21bb085d220d",
+          "status": "completed",
+          "stats": {
+            "domains": 3,
+            "fetched_pages": 11,
+            "robots_disallowed": 2,
+            "unreachable": 0,
+            "prospects": 2,
+            "already_in_crm": 1
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:03:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Hunt not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-057",
+    "domain": "Lead Hunter",
+    "method": "GET",
+    "path": "/api/v1/hunts/{huntId}/prospects",
+    "title": "Results and scoring",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "f0075a89-77cf-5d3d-9e28-9e37f2339004",
+              "domain": "brightpixel.example",
+              "company_name": "BrightPixel",
+              "score": 85,
+              "score_reasons": [
+                "industry keywords: marketing agency",
+                "country PK",
+                "contact page found",
+                "public business email listed",
+                "uses wordpress"
+              ],
+              "public_emails": [
+                "info@brightpixel.example"
+              ],
+              "source_url": "https://brightpixel.example/about",
+              "status": "new"
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:03:30Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Hunt not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-058",
+    "domain": "Lead Hunter",
+    "method": "POST",
+    "path": "/api/v1/prospects/{prospectId}/promote",
+    "title": "Promote prospect to CRM",
+    "auth": "session",
+    "request": {
+      "owner_id": "d020ad78-8e9e-5cb5-ace0-e3c092fd4c8f"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "BrightPixel added to CRM.",
+        "data": {
+          "contact_id": "041f7634-1a7e-5c02-ae2c-cff0cfb5d5db",
+          "company_id": "b3a75df0-9029-5ca6-8389-c173a6d6a357",
+          "lifecycle_stage": "lead"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:10:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SUPPRESSED_CONTACT",
+          "message": "This domain asked not to be contacted.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      422
+    ]
+  },
+  {
+    "id": "API-059",
+    "domain": "Lead Hunter",
+    "method": "POST",
+    "path": "/api/v1/prospects/{prospectId}/outreach-draft",
+    "title": "Draft outreach email",
+    "auth": "session",
+    "request": {
+      "template": "intro_services",
+      "sender_name": "Usman Tariq",
+      "offer": "website maintenance"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "subject": "Website maintenance for BrightPixel",
+          "body": "Hi BrightPixel team,\n\nI saw on your site that you build WordPress sites for marketing clients. Acme Tech handles website maintenance so agencies like yours can focus on clients.\n\nWould a 15-minute call next week be useful?\n\nUsman Tariq\nAcme Tech\n\nIf you prefer not to hear from us, reply 'unsubscribe' and we will not contact you again.",
+          "template": "intro_services",
+          "fields_used": [
+            "company_name",
+            "tech",
+            "sender_name",
+            "offer"
+          ],
+          "send_via": "copy_to_mail_client"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:12:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "SUPPRESSED_CONTACT",
+          "message": "This domain asked not to be contacted.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      422
+    ]
+  },
+  {
+    "id": "API-060",
+    "domain": "Lead Hunter",
+    "method": "POST",
+    "path": "/api/v1/suppressions",
+    "title": "Add to do-not-contact list",
+    "auth": "session",
+    "request": {
+      "kind": "domain",
+      "value": "adsmiths.example",
+      "reason": "opt_out"
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "data": {
+          "kind": "domain",
+          "stored_as": "sha256",
+          "prospects_suppressed": 1
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:15:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Enter a valid email or domain.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400
+    ]
+  },
+  {
+    "id": "API-061",
+    "domain": "Automation and Rules",
+    "method": "GET",
+    "path": "/api/v1/rules",
+    "title": "Automation dashboard",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "95510c77-2c22-5a8e-93d8-ee41862bcc20",
+              "key": "stale_deal_nudge",
+              "version": 1,
+              "trigger": "deal.stale",
+              "enabled": true,
+              "runs_7d": 14,
+              "matched_7d": 3,
+              "failed_7d": 0
+            }
+          ],
+          "external_api_calls_7d": 0
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "Only leadership can manage automations.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-062",
+    "domain": "Automation and Rules",
+    "method": "POST",
+    "path": "/api/v1/rules",
+    "title": "Create rule",
+    "auth": "session",
+    "request": {
+      "key": "stale_deal_nudge",
+      "definition": {
+        "trigger": "deal.stale",
+        "when": {
+          "all": [
+            {
+              "fact": "deal.days_since_activity",
+              "op": "gte",
+              "value": 14
+            },
+            {
+              "any": [
+                {
+                  "fact": "deal.stage",
+                  "op": "in",
+                  "value": [
+                    "proposal",
+                    "negotiation"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "then": [
+          {
+            "action": "notify",
+            "to": "owner",
+            "template": "deal_stale"
+          },
+          {
+            "action": "create_task",
+            "assign": "owner",
+            "title": "Follow up: {deal.title}",
+            "due_in_hours": 24
+          }
+        ]
+      }
+    },
+    "success": {
+      "status": 201,
+      "body": {
+        "success": true,
+        "message": "Rule saved.",
+        "data": {
+          "id": "95510c77-2c22-5a8e-93d8-ee41862bcc20",
+          "key": "stale_deal_nudge",
+          "version": 1,
+          "enabled": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-01T07:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "RULE_INVALID",
+          "message": "Fact 'deal.secret' is not available for trigger deal.stale.",
+          "retryable": false,
+          "details": {
+            "reason": "FACT_NOT_ALLOWED:deal.secret"
+          }
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      201,
+      400,
+      403
+    ]
+  },
+  {
+    "id": "API-063",
+    "domain": "Automation and Rules",
+    "method": "POST",
+    "path": "/api/v1/rules/{ruleId}/simulate",
+    "title": "Simulate rule",
+    "auth": "session",
+    "request": {
+      "facts": {
+        "deal.days_since_activity": 15,
+        "deal.stage": "proposal",
+        "deal.title": "Website rebuild"
+      }
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "matched": true,
+          "trace": [
+            {
+              "fact": "deal.days_since_activity",
+              "op": "gte",
+              "value": 14,
+              "actual": 15,
+              "result": true
+            },
+            {
+              "fact": "deal.stage",
+              "op": "in",
+              "value": [
+                "proposal",
+                "negotiation"
+              ],
+              "actual": "proposal",
+              "result": true
+            }
+          ],
+          "actions": [
+            {
+              "action": "notify",
+              "to": "owner",
+              "template": "deal_stale"
+            },
+            {
+              "action": "create_task",
+              "assign": "owner",
+              "title": "Follow up: Website rebuild",
+              "due_in_hours": 24
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Rule not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  },
+  {
+    "id": "API-064",
+    "domain": "Automation and Rules",
+    "method": "GET",
+    "path": "/api/v1/rule-runs",
+    "title": "Workflow execution logs",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "bf51d58a-6fa0-52ec-8449-0ff16d9a8e63",
+              "rule": "stale_deal_nudge",
+              "event": "deal.stale",
+              "outcome": "matched",
+              "actions": [
+                "notify",
+                "create_task"
+              ],
+              "ran_at": "2026-10-12T01:00:00Z"
+            }
+          ],
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "Only leadership can view automation logs.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-065",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "GET",
+    "path": "/api/v1/leakage/findings",
+    "title": "Revenue leakage findings",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "totals": {
+            "open": 3,
+            "amount_at_risk": "8620.00",
+            "currency": "USD"
+          },
+          "items": [
+            {
+              "id": "0b11ee2e-7988-5265-8a7b-9479b8d4071a",
+              "kind": "overdue_invoice",
+              "label": "INV-2026-1031 overdue 11 days",
+              "amount_at_risk": "6000.00",
+              "currency": "USD",
+              "evidence": {
+                "number": "INV-2026-1031",
+                "days_overdue": 11
+              },
+              "detected_at": "2026-10-12T20:00:00Z"
+            },
+            {
+              "id": "2a3b0459-948a-5ada-bf98-8355471d4ee0",
+              "kind": "stale_deal",
+              "label": "Contoso redesign - no activity 17 days",
+              "amount_at_risk": "2500.00",
+              "currency": "USD",
+              "evidence": {
+                "stage": "proposal",
+                "days_without_activity": 17,
+                "weighting": "0.50",
+                "deal_amount": "5000.00"
+              },
+              "detected_at": "2026-10-12T20:00:00Z"
+            },
+            {
+              "id": "d217d558-6b2c-57d3-b6fb-74ed1b96be02",
+              "kind": "unbilled_time",
+              "label": "Contoso support - 3 h unbilled",
+              "amount_at_risk": "120.00",
+              "currency": "USD",
+              "evidence": {
+                "minutes": 180,
+                "entries": 1
+              },
+              "detected_at": "2026-10-12T20:00:00Z"
+            }
+          ],
+          "note": "Amounts are estimates of money at risk."
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-13T04:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "Only the CEO, CFO and COO can see leakage findings.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-066",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "POST",
+    "path": "/api/v1/leakage/findings/{findingId}/resolve",
+    "title": "Resolve or dismiss finding",
+    "auth": "session",
+    "request": {
+      "resolution": "resolved",
+      "note": "Reminder sent; client promised payment Friday"
+    },
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "0b11ee2e-7988-5265-8a7b-9479b8d4071a",
+          "status": "resolved",
+          "resolved_by": "Omar Siddiqui",
+          "resolved_at": "2026-10-13T05:00:00Z"
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-13T05:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 409,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "ALREADY_RESOLVED",
+          "message": "This finding was already resolved.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400,
+      409
+    ]
+  },
+  {
+    "id": "API-067",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "GET",
+    "path": "/api/v1/dashboards/{role}",
+    "title": "Role-based dashboard",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "role": "cfo",
+          "period": {
+            "label": "October 2026",
+            "from": "2026-10-01",
+            "to": "2026-10-31"
+          },
+          "currency": "USD",
+          "tiles": [
+            {
+              "key": "invoiced",
+              "label": "Invoiced this month",
+              "value": "18450.00",
+              "source": "invoices"
+            },
+            {
+              "key": "collected",
+              "label": "Collected",
+              "value": "11600.00",
+              "source": "payments"
+            },
+            {
+              "key": "outstanding",
+              "label": "Outstanding invoices",
+              "value": "6850.00",
+              "count": 4,
+              "source": "invoices - payments"
+            },
+            {
+              "key": "leakage",
+              "label": "Revenue at risk",
+              "value": "8620.00",
+              "source": "leakage_findings"
+            }
+          ],
+          "budget_projects": [
+            {
+              "project": "Northwind website",
+              "budget": "5000.00",
+              "cost_to_date": "1820.00",
+              "ratio": "0.36"
+            }
+          ],
+          "unavailable": [
+            {
+              "key": "operating_expenses",
+              "reason": "No accounting integration in Release 1"
+            },
+            {
+              "key": "net_profit",
+              "reason": "Needs operating expenses"
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-13T04:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHORIZATION_DENIED",
+          "message": "You can only open your own role's dashboard.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "id": "API-068",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "GET",
+    "path": "/api/v1/graph/neighbors",
+    "title": "Graph memory: related items",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "node": {
+            "kind": "person",
+            "label": "Bilal Ahmed"
+          },
+          "neighbors": [
+            {
+              "kind": "project",
+              "label": "Northwind website",
+              "depth": 1,
+              "via": [
+                "works_on"
+              ]
+            },
+            {
+              "kind": "client",
+              "label": "Northwind Digital",
+              "depth": 2,
+              "via": [
+                "works_on",
+                "billed_by"
+              ]
+            }
+          ]
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:00:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 400,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "message": "Depth must be 1, 2 or 3.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      400,
+      404
+    ]
+  },
+  {
+    "id": "API-069",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "GET",
+    "path": "/api/v1/notifications",
+    "title": "Notifications",
+    "auth": "session",
+    "request": null,
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "b285c048-87d0-5a1d-a2fb-68ca95133529",
+              "kind": "leave.requested",
+              "title": "Bilal Ahmed requested 3 days annual leave",
+              "ref_type": "leave_request",
+              "ref_id": "926408eb-ff9a-5b9b-9bb8-002245f807af",
+              "read": false,
+              "created_at": "2026-10-12T06:00:00Z"
+            }
+          ],
+          "unread": 1,
+          "next_cursor": null
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:05:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "AUTHENTICATION_REQUIRED",
+          "message": "Your session has expired. Sign in again.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      401
+    ]
+  },
+  {
+    "id": "API-070",
+    "domain": "Revenue Engine and Dashboards",
+    "method": "POST",
+    "path": "/api/v1/notifications/{notificationId}/read",
+    "title": "Mark notification read",
+    "auth": "session",
+    "request": {},
+    "success": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "b285c048-87d0-5a1d-a2fb-68ca95133529",
+          "read": true
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21",
+          "timestamp": "2026-10-12T06:06:00Z"
+        }
+      }
+    },
+    "extra": [],
+    "error": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Notification not found.",
+          "retryable": false,
+          "details": {}
+        },
+        "meta": {
+          "api_version": "v1",
+          "request_id": "req_7f3a9c21"
+        }
+      }
+    },
+    "statuses": [
+      200,
+      404
+    ]
+  }
+]

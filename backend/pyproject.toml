@@ -1,0 +1,22 @@
+[project]
+name = "ems-backend"
+version = "1.0.0"
+description = "EMS Release 1 API service and worker"
+requires-python = ">=3.11,<3.12"
+
+[tool.ruff]
+line-length = 150
+target-version = "py311"
+extend-exclude = ["app/engine"]          # pack code owned by the engine task; kept verbatim
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
+ignore = ["S101", "B008"]                 # asserts in tests; FastAPI Depends() defaults
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

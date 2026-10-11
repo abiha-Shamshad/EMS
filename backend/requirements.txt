@@ -1,0 +1,14 @@
+# EMS Release 1 backend - versions pinned by spec DEC-002 / TASK-001 (evidence EV-013).
+# Changing a pin means re-running the Appendix H checks.
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.0
+SQLAlchemy==2.1.4
+alembic==1.20.0
+psycopg[binary]==3.3.6
+argon2-cffi==25.1.0
+httpx==0.28.1
+APScheduler==3.11.3
+beautifulsoup4==4.15.0
+livekit-api==1.2.1
+PyJWT[crypto]==2.15.1

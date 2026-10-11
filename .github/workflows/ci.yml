@@ -1,0 +1,56 @@
+# EMS Release 1 CI (spec Section 35, TASK-001): lint, engine tests, spec checks, LiveKit grant checks,
+# DB-01..18 on PostgreSQL 17, API integration/contract tests. Next.js and extension builds are added by TASK-016 / TASK-011.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (ruff + pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust      # verify_ems_db.py and the tests connect as ems_app / ems_worker without passwords
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned dependencies
+        run: pip install -r backend/requirements-dev.txt
+      - name: Lint
+        working-directory: backend
+        run: ruff check app worker migrations tests
+      - name: Engine tests (G2)
+        working-directory: backend/app
+        run: python -m unittest engine.tests.test_engine
+      - name: Spec consistency (CHK-01..12)
+        run: python tools/check_spec.py
+      - name: LiveKit grants (G10, LK-01..03)
+        run: python tools/check_livekit_tokens.py
+      - name: Database checks (G1, DB-01..18)
+        run: |
+          createdb -U postgres emsverify
+          psql -U postgres -d emsverify -v ON_ERROR_STOP=1 -f db/001_ems_schema.sql -f db/002_ems_settings_tokens.sql -f db/003_ems_platform_gaps.sql
+          PGDATABASE=emsverify PGUSER=postgres python db/verify_ems_db.py
+      - name: Alembic migrations apply cleanly
+        working-directory: backend
+        run: |
+          createdb -U postgres emsalembic
+          ADMIN_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/emsalembic alembic upgrade head
+      - name: API integration and contract tests (G3 partial, G8, G9)
+        working-directory: backend
+        env:
+          TEST_ADMIN_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+        run: pytest -q
