@@ -72,7 +72,13 @@ def record_invoice(body: InvoiceIn, ctx: SessionCtx, idem: IdemKey):
         except IntegrityError as exc:                    # concurrent duplicate number
             raise ApiError("INVOICE_NUMBER_TAKEN", f"Invoice number {body.number} already exists.") from exc
         if entry_ids:
-            db.execute("UPDATE ems.time_entries SET invoice_id = :inv WHERE id = ANY(:ids)", inv=invoice_id, ids=entry_ids)
+            # The check above can race a concurrent invoice for the same entries; this conditional update cannot. A second
+            # request waits for the first to commit, then finds the entries already invoiced and rolls back.
+            billed = db.execute("UPDATE ems.time_entries SET invoice_id = :inv WHERE id = ANY(:ids) AND billable AND invoice_id IS NULL",
+                                inv=invoice_id, ids=entry_ids).rowcount
+            if billed != len(entry_ids):
+                raise invalid("Some time entries were invoiced by another request. Reload and choose the entries again.",
+                              {"time_entry_ids": "Already invoiced."})
         ctx.audit("invoice.recorded", "invoice", invoice_id)
         ctx.emit("invoice.recorded", {"invoice_id": str(invoice_id), "client_id": str(body.client_id)})
         return ok({"id": invoice_id, "status": "sent", "outstanding": money(body.amount)}, f"Invoice {body.number} recorded.", status=201)

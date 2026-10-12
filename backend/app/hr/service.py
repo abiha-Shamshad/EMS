@@ -12,6 +12,11 @@ LEAVE_KINDS = ("annual", "sick", "casual", "unpaid")
 IDLE_REVIEW_THRESHOLD = 60          # minutes; same default as engine/leakage.py idle_minutes_threshold
 
 
+def role_holders(db: Db, *roles: str) -> list[uuid.UUID]:
+    """Active members holding any of the roles (notification recipients)."""
+    return [r["user_id"] for r in db.all("SELECT user_id FROM ems.memberships WHERE status = 'active' AND role = ANY(:r)", r=list(roles))]
+
+
 def latest_policy(db: Db, topic: str) -> dict[str, Any] | None:
     return db.one("SELECT topic, version, text, rules, published_at FROM ems.hr_policies WHERE topic = :t "
                   "ORDER BY version DESC LIMIT 1", t=topic)

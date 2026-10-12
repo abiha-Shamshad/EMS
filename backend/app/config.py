@@ -3,6 +3,7 @@
 The API refuses to start when a required variable is missing, or when EMAIL_PROVIDER / AI_REPHRASER name an adapter
 that is not implemented: there is no fake success path (Appendix F rule 4).
 """
+import ipaddress
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -50,6 +51,7 @@ class Settings:
     email_provider: str
     ai_rephraser: str
     log_level: str
+    forwarded_allow_ips: str            # proxies whose X-Forwarded-For uvicorn trusts (app/serve.py)
 
     @property
     def google_configured(self) -> bool:
@@ -70,6 +72,21 @@ class Settings:
         if self.extension_id:
             origins.append(f"chrome-extension://{self.extension_id}")
         return origins
+
+
+def _forwarded_allow_ips() -> str:
+    """Client IPs (used by the per-IP rate limits) come from X-Forwarded-For only for these proxies. '*' would let any
+    client spoof its address, so it is refused; unset would make every request appear to come from the load balancer."""
+    raw = _require("FORWARDED_ALLOW_IPS")
+    entries = [e.strip() for e in raw.split(",") if e.strip()]
+    if not entries or "*" in entries:
+        raise ConfigError("FORWARDED_ALLOW_IPS must list the load balancer addresses or ranges; '*' is not allowed.")
+    for entry in entries:
+        try:
+            ipaddress.ip_network(entry, strict=False)
+        except ValueError as exc:
+            raise ConfigError(f"FORWARDED_ALLOW_IPS entry '{entry}' is not an IP address or range.") from exc
+    return ",".join(entries)
 
 
 def load_settings() -> Settings:
@@ -113,6 +130,7 @@ def load_settings() -> Settings:
         email_provider=email_provider,
         ai_rephraser=ai_rephraser,
         log_level=os.environ.get("LOG_LEVEL", "info").strip().upper() or "INFO",
+        forwarded_allow_ips=_forwarded_allow_ips(),
     )
 
 

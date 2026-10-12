@@ -1,7 +1,7 @@
 """Scheduled jobs per company time zone (TASK-006, TASK-017 retention).
 
 One tick per minute walks every company (ems.worker_organizations()) in its own transaction and RLS context.
-Daily jobs (HR report 23:30, retention 02:00) are emitted as outbox events with deterministic IDs, so a repeated or
+Daily jobs (leakage + rule triggers 01:00, HR report 23:30, retention 02:00) are emitted as outbox events with deterministic IDs, so a repeated or
 delayed tick inside the window can never run them twice; their handlers do the work.
 """
 import datetime as dt
@@ -15,12 +15,13 @@ from app.platform import events
 from app.platform.db import Db, transaction
 from app.platform.timeutil import Calendar, utcnow
 from app.room import service as room
+from app.room.livekit import MediaConfig
 from worker.registry import Event, handles
 
 log = logging.getLogger("ems.worker.jobs")
 NS = uuid.UUID("2b7c0a3e-0d1f-4a8e-9a4b-6c1e5f0d7a21")          # namespace for deterministic scheduled-event IDs
 VIEW_TOKEN_LIFETIME = dt.timedelta(minutes=15)                    # API-026 view token TTL
-HR_REPORT_AT, RETENTION_AT = dt.time(23, 30), dt.time(2, 0)
+HR_REPORT_AT, RETENTION_AT, NIGHTLY_AT = dt.time(23, 30), dt.time(2, 0), dt.time(1, 0)
 RETENTION = {                                                     # Section 32
     "presence_segments": ("ended_at", "12 months"), "stream_views": ("started_at", "12 months"),
     "agent_logs": ("created_at", "90 days"), "crawl_log": ("fetched_at", "90 days"),
@@ -54,10 +55,11 @@ def auto_close_sessions(db: Db, cal: Calendar, now: dt.datetime) -> int:
     return closed
 
 
-def sweep_views(db: Db) -> int:
-    """Views still open past the token lifetime are closed at that lifetime (API-027)."""
-    return db.execute("UPDATE ems.stream_views SET ended_at = started_at + :life WHERE ended_at IS NULL AND started_at < now() - :life",
-                      life=VIEW_TOKEN_LIFETIME).rowcount
+def sweep_views(db: Db, media: MediaConfig) -> int:
+    """Disconnect views that must end (token lifetime passed, live view switched off, the employee stopped sharing, the
+    viewer deactivated) and retry removals that failed in the API. `ended_at` is written only after LiveKit removed
+    the viewer (API-027), so a view stays open - and is retried next minute - while the media server is unreachable."""
+    return len(room.disconnect_views(db, media, room.views_to_disconnect(db, VIEW_TOKEN_LIFETIME)))
 
 
 # ------------------------------------------------------------------------------------------------ hourly
@@ -108,8 +110,8 @@ def _in_window(local: dt.datetime, at: dt.time, minutes: int = 30) -> bool:
     return start <= local < start + dt.timedelta(minutes=minutes)
 
 
-def tick(engine: Engine) -> None:
-    now = utcnow()
+def tick(engine: Engine, media: MediaConfig | None = None) -> None:
+    now, media = utcnow(), media or MediaConfig.from_env()
     with engine.connect() as conn:
         orgs = conn.execute(text("SELECT org_id, time_zone, work_hours FROM ems.worker_organizations()")).mappings().all()
     for org in orgs:
@@ -120,12 +122,15 @@ def tick(engine: Engine) -> None:
                 local = cal.local(now)
                 presence_timeouts(db, now)
                 auto_close_sessions(db, cal, now)
-                sweep_views(db)
+                sweep_views(db, media)
                 if local.minute == 0:
                     emit_overdue_tasks(db, org["org_id"], now)
                 if _in_window(local, HR_REPORT_AT):
                     events.emit(db, org["org_id"], "platform.hr_daily_report", {"date": local.date().isoformat()},
                                 event_id=scheduled_id(org["org_id"], "hr_daily_report", local.date().isoformat()))
+                if _in_window(local, NIGHTLY_AT):                   # leakage run + nightly rule triggers (worker/automation.py)
+                    events.emit(db, org["org_id"], "platform.nightly", {"date": local.date().isoformat()},
+                                event_id=scheduled_id(org["org_id"], "nightly", local.date().isoformat()))
                 if _in_window(local, RETENTION_AT):
                     events.emit(db, org["org_id"], "platform.retention", {"date": local.date().isoformat()},
                                 event_id=scheduled_id(org["org_id"], "retention", local.date().isoformat()))

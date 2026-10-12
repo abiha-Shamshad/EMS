@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1")
 
 
 def client_ip(request: Request) -> str:
-    # Behind the load balancer run uvicorn with --proxy-headers and FORWARDED_ALLOW_IPS=<ALB range> so this is the real client.
+    # app.serve runs uvicorn with --proxy-headers and the required FORWARDED_ALLOW_IPS, so behind the load balancer this is the real client.
     return request.client.host if request.client else "unknown"
 
 

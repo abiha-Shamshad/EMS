@@ -1,4 +1,4 @@
-"""EMS API service (FastAPI). Run: FORWARDED_ALLOW_IPS=<load balancer range> uvicorn app.main:app --proxy-headers"""
+"""EMS API service (FastAPI). Run: python -m app.serve (validates the settings, then starts uvicorn with proxy headers)."""
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
@@ -12,16 +12,20 @@ from app.crm import router as crm
 from app.dashboards import router as dashboards
 from app.finance import router as finance
 from app.graph import router as graph
+from app.hr import agent as hr_agent
 from app.hr import router as hr
+from app.hunter import router as hunter
+from app.leakage import router as leakage
 from app.org import router as org
 from app.platform import notifications
 from app.platform.db import make_engine
 from app.platform.web import RequestMiddleware, configure_logging, install_exception_handlers
 from app.projects import router as projects
 from app.room import router as room
+from app.rules import router as rules
 
-ROUTERS = [health.router, auth.router, google.router, org.router, room.router, hr.router, projects.router, crm.router,
-           finance.router, graph.router, dashboards.router, notifications.router]
+ROUTERS = [health.router, auth.router, google.router, org.router, room.router, hr.router, hr_agent.router, projects.router, crm.router,
+           finance.router, hunter.router, rules.router, leakage.router, graph.router, dashboards.router, notifications.router]
 
 
 def _csp(settings: Settings) -> str:

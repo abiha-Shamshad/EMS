@@ -5,12 +5,16 @@ closed intervals. A segment is written only when presence or task changes. A hea
 becomes 'offline' starting HEARTBEAT_SECONDS after the last heartbeat - the same rule as engine.presence.segments().
 """
 import datetime as dt
+import logging
 import uuid
 from typing import Any
 
 from app.engine import presence as presence_engine
 from app.platform.db import Db
 from app.platform.timeutil import Calendar
+from app.room import livekit
+
+log = logging.getLogger("ems.room")
 
 OFFLINE_AFTER = dt.timedelta(seconds=presence_engine.OFFLINE_AFTER)
 HEARTBEAT = dt.timedelta(seconds=presence_engine.HEARTBEAT_SECONDS)
@@ -141,12 +145,50 @@ def close_session(db: Db, session: dict, end_at: dt.datetime, state: str = "clos
     return {"totals_minutes": totals(segs), "time_entries_created": _room_time_entries(db, session, segs), "ended_at": end_at}
 
 
+# ------------------------------------------------------------------------------------------------ live views
+VIEW_COLUMNS = "v.id, v.org_id, v.viewer_id, v.subject_user_id, v.started_at"
+
+
+def open_views_involving(db: Db, user_id: uuid.UUID, as_viewer: bool = True) -> list[dict[str, Any]]:
+    """Open views where the person is the employee being watched, or (with `as_viewer`) the viewer."""
+    return db.all(f"SELECT {VIEW_COLUMNS} FROM ems.stream_views v WHERE v.ended_at IS NULL "  # noqa: S608 - constant columns
+                  "AND (v.subject_user_id = :u OR (:viewer AND v.viewer_id = :u))", u=user_id, viewer=as_viewer)
+
+
+def views_to_disconnect(db: Db, token_lifetime: dt.timedelta) -> list[dict[str, Any]]:
+    """Open views that must end: past the view token lifetime, live view switched off for the company, the viewer
+    deactivated, or the employee no longer sharing (checked out, on a break, consent withdrawn, offline).
+    Runs under one company's RLS context."""
+    return db.all(
+        f"SELECT {VIEW_COLUMNS} FROM ems.stream_views v JOIN ems.organizations o ON o.id = v.org_id "  # noqa: S608 - constant columns
+        "LEFT JOIN ems.work_sessions s ON s.user_id = v.subject_user_id AND s.state = 'open' "
+        "JOIN ems.memberships viewer ON viewer.user_id = v.viewer_id "
+        "WHERE v.ended_at IS NULL AND (v.started_at < now() - :life OR NOT o.live_view_enabled OR viewer.status <> 'active' "
+        "OR s.id IS NULL OR NOT s.streaming OR s.presence IN ('on_break', 'offline') "
+        "OR NOT EXISTS (SELECT 1 FROM ems.stream_consents c WHERE c.user_id = v.subject_user_id "
+        "               AND c.policy_version = o.room_policy_version AND c.revoked_at IS NULL)) "
+        "ORDER BY v.started_at", life=token_lifetime)
+
+
+def disconnect_views(db: Db, media: livekit.MediaConfig, views: list[dict[str, Any]]) -> list[uuid.UUID]:
+    """Remove each viewer from LiveKit, and record `ended_at` only once the removal succeeded. A view whose removal
+    failed stays open; the every-minute worker sweep retries it. Returns the IDs of the views that ended."""
+    ended = []
+    for v in views:
+        try:
+            livekit.remove_viewer(media, v["org_id"], v["subject_user_id"], v["id"])
+        except livekit.MediaError:
+            log.warning("viewer removal failed; the sweep will retry", exc_info=True, extra={"fields": {"view_id": str(v["id"])}})
+            continue
+        if db.scalar("UPDATE ems.stream_views SET ended_at = now() WHERE id = :v AND ended_at IS NULL RETURNING id", v=v["id"]):
+            ended.append(v["id"])
+    return ended
+
+
 def extension_token_expiry(calendar: Calendar, now: dt.datetime) -> dt.datetime:
-    """Valid until 2 hours after the company's work end today, at most 14 hours (Section 7.3). A check-in after that
-    point gets 2 hours so the session can still be closed from the extension."""
-    candidate = calendar.work_end(calendar.local_date(now)) + dt.timedelta(hours=2)
-    if candidate <= now:
-        candidate = now + dt.timedelta(hours=2)
+    """Valid until 2 hours after the company's work end today, at most 14 hours (Section 7.3). Never less than 2 hours,
+    so a late check-in (19:30 with work ending at 18:00) can still be closed from the extension."""
+    candidate = max(calendar.work_end(calendar.local_date(now)) + dt.timedelta(hours=2), now + dt.timedelta(hours=2))
     return min(candidate, now + dt.timedelta(hours=14))
 
 

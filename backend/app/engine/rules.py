@@ -21,7 +21,7 @@ ACTIONS = {"notify", "create_task", "assign_owner", "set_stage_flag", "create_fi
 TRIGGER_FACTS = {
     "deal.stale": {"deal.days_since_activity", "deal.stage", "deal.amount", "deal.owner_role"},
     "task.overdue": {"task.hours_overdue", "task.status", "task.billable", "project.billing_type"},
-    "attendance.late": {"employee.minutes_late", "employee.role", "employee.department", "day.is_holiday"},
+    "attendance.late": {"employee.minutes_late", "employee.late_count_7d", "employee.role", "employee.department", "day.is_holiday"},
     "invoice.overdue": {"invoice.days_overdue", "invoice.outstanding", "client.status"},
     "leave.requested": {"leave.days", "leave.kind", "employee.leave_balance", "team.on_leave_count"},
     "prospect.scored": {"prospect.score", "prospect.has_public_email", "prospect.country"},

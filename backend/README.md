@@ -5,8 +5,8 @@ FastAPI API service + one worker process over PostgreSQL with FORCE row-level se
 
 ## Scope
 
-Implemented: TASK-001..007, 009, 010, 014, the API side of TASK-011 (publish/view tokens), the HR part of TASK-008,
-dashboards from TASK-015, retention/rate limits/headers from TASK-017. **55 of the 70 operations**:
+Implemented: TASK-001..010, 012..015, the API side of TASK-011 (publish/view tokens), retention/rate limits/headers
+from TASK-017. **All 70 operations** (`tests/test_contract_coverage.py` checks every contract path is routed):
 
 | Area | Operations |
 |---|---|
@@ -14,13 +14,17 @@ dashboards from TASK-015, retention/rate limits/headers from TASK-017. **55 of t
 | Company and team | API-010..016 |
 | Live Employee Room | API-017..028 |
 | People and HR | API-029..034 |
+| HR Agent and HR policies | API-035..037 |
 | Projects and tasks | API-038..044 |
 | CRM, client lifecycle, invoices, payments | API-045..054 |
+| Lead Hunter | API-055..060 |
+| Rule engine (automation) | API-061..064 |
+| Revenue leakage | API-065..066 |
 | Dashboards, graph memory, notifications | API-067..070 |
 
-Not in this backend (owned by other tasks): HR Agent and HR policies API-035..037, Lead Hunter API-055..060,
-rule engine API-061..064 and starter rules, leakage job and API-065/066 (Wajiha); web app and Chrome extension (Andleeb).
-Their tables exist; the worker exposes `worker.registry.handles(...)` so those handlers plug in without changing the loop.
+Not in this backend: the web app and the Chrome extension. Still gated by owner decisions: live viewing of real
+employees (OD-02), automatic email (INT-003 / OD-09; outreach is a copy-to-mail-client draft), any language model
+(INT-006 / OD-06; the HR Agent is rule-based).
 
 ## Layout
 
@@ -31,10 +35,17 @@ app/
   health.py          API-001
   platform/          request pipeline (context.py), envelope, errors (Section 33), idempotency, rate limits,
                      audit/outbox/notifications, pagination, company calendar, security, notifications API
+  serve.py           API entry point: python -m app.serve (uvicorn with proxy headers from FORWARDED_ALLOW_IPS)
   auth/  org/  room/  hr/  projects/  crm/  finance/  graph/  dashboards/
-  engine/            verbatim copy of the pack engine (rules, presence, leakage, robots, scoring, hr_agent) + its tests
-worker/              outbox loop (main.py), handler registry, notification + graph handlers, per-timezone jobs
-migrations/          Alembic: 0001 = db/001 + db/002 verbatim, 0002 = db/003
+  hr/agent.py        HR Agent (engine/hr_agent.py over SQL) and versioned HR policies
+  hunter/            Lead Hunter API and the crawler the worker runs (robots.txt, pacing, role addresses only)
+  rules/             rule API, action validation and executor, starter rules
+  leakage/           nightly detector run (engine/leakage.py) and findings API
+  engine/            copy of the pack engine (rules, presence, leakage, robots, scoring, hr_agent) + its tests; one
+                     addition: the fact employee.late_count_7d for attendance.late (starter rule late_three_times)
+worker/              outbox loop (main.py), handler registry, notification + graph handlers, per-timezone jobs,
+                     automation.py (rule runs, starter rules, 01:00 nightly run, Lead Hunter crawl job)
+migrations/          Alembic: 0001 = db/001 + db/002 verbatim, 0002 = db/003, 0003 = db/004, 0004 = db/005
 tests/               integration tests against a disposable PostgreSQL (TEST-001 shape checks, G8, G9, role matrix)
 ```
 
@@ -44,7 +55,7 @@ tests/               integration tests against a disposable PostgreSQL (TEST-001
 pip install -r requirements-dev.txt                       # Python 3.11, pinned versions (DEC-002)
 ADMIN_DATABASE_URL=postgresql+psycopg://postgres@host/ems alembic upgrade head
 cp .env.example .env                                      # fill in; API connects as ems_app, worker as ems_worker
-FORWARDED_ALLOW_IPS=<load balancer range> uvicorn app.main:app --proxy-headers
+FORWARDED_ALLOW_IPS=127.0.0.1 python -m app.serve                # prod: the load balancer range; "*" is refused
 python -m worker.main
 
 # checks
@@ -69,6 +80,15 @@ TEST_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres pytest   #
 | Repeat check-in | Returns the open session without a new extension token (per contract) | If the web app checked in first, the extension cannot obtain a token: needs a product decision |
 | Graph `works_on` | person -> project | Section 16 allows project or task; the API-068 example shows projects |
 | Live view off | API-024/026 return 403 while `live_view_enabled = false`; no API can switch it on | OD-02 legal gate |
+| Rule actions | Each action's parameters are validated when the rule is saved (recipients the trigger can resolve, known templates, `set_stage_flag` only `at_risk` on invoice.overdue, `create_finding` only the trigger's own kind) | The engine checks action names only; a saved rule must always be executable |
+| Rule follow-up tasks | `create_task` for a trigger without a project (deal.stale) goes to one internal project, "Automation follow-ups" | `tasks.project_id` is required |
+| Rule versions | Saving a key again creates version n+1 and disables older versions; starter rules are seeded on `org.created` and by the nightly job if missing | Section 15 has no enable/disable API |
+| `late_three_times` | Added fact `employee.late_count_7d` to `engine/rules.py` (first session of each day, last 7 days) | The starter rule cannot be written with the pack's four facts |
+| deal.stale / invoice.overdue | Emitted nightly (01:00) for every open deal idle 1+ day and every unpaid invoice past due, deterministic IDs per day | Rules hold the thresholds |
+| Leakage refresh | A detector hit on a record with an open finding under an older fingerprint refreshes it; open findings no longer detected resolve automatically | Unbilled time is fingerprinted per day; avoid one row per night |
+| HR policy rules | Allowed rule keys per topic (`leave`: `*_days`; `attendance`: grace, break allowance; `breaks`: allowance); publishing applies them to company settings; a `monitoring` policy bumps `room_policy_version` | Section 31.2 "rules reload; consent version bump" |
+| HR Agent scope | Managers see their direct reports only; CTO/CFO/employees get team questions refused by the engine | Section 7.2 team scope |
+| Hunt seeds | Seeds already in the CRM (company domain) or on the suppression list are not crawled; a domain seen in an earlier hunt moves to the new hunt | Prospects are unique per company domain |
 
 ## Security notes
 

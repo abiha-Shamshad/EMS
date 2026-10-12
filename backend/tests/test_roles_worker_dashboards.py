@@ -69,10 +69,12 @@ def test_failing_handler_is_retried_then_skipped(company, worker_engine, admin_s
         loop.run_once()                                           # back-off: not retried immediately
         assert len(calls) == 1
         event_id = calls[0]
-        loop.attempts[event_id], loop.retry_at[event_id] = 10, 0
-        loop.run_once()                                           # poison after 10 attempts: skipped, stays unpublished
-        assert len(calls) == 1
-        assert admin_sql("SELECT published_at FROM ems.outbox_events WHERE id = %s", event_id)[0][0] is None
+        assert admin_sql("SELECT attempts, next_attempt_at > now(), dead FROM ems.outbox_events WHERE id = %s", event_id)[0] == (1, True, False)
+        admin_sql("UPDATE ems.outbox_events SET attempts = 9, next_attempt_at = now() WHERE id = %s", event_id)
+        loop.run_once()                                           # 10th failure: marked dead, stays unpublished
+        loop.run_once()
+        assert len(calls) == 2
+        assert admin_sql("SELECT published_at, dead FROM ems.outbox_events WHERE id = %s", event_id)[0] == (None, True)
     finally:
         HANDLERS.pop("test.poison")
         admin_sql("UPDATE ems.outbox_events SET published_at = now() WHERE routing_key = 'test.poison'")
@@ -91,7 +93,8 @@ def test_minute_tick_offline_auto_close_and_view_sweep(company, worker_engine, a
     assert state == "auto_closed" and presence == "offline"
     assert admin_sql("SELECT count(*) FROM ems.extension_tokens WHERE session_id = %s AND revoked_at IS NULL", session)[0][0] == 0
     assert admin_sql("SELECT count(*) FROM ems.stream_views WHERE org_id = %s AND ended_at IS NULL", co["org_id"])[0][0] == 0
-    assert admin_sql("SELECT ended_at - started_at FROM ems.stream_views WHERE org_id = %s", co["org_id"])[0][0] == dt.timedelta(minutes=15)
+    # Ended when the viewer was removed (LiveKit is not configured here, so there is no participant to remove).
+    assert admin_sql("SELECT ended_at >= started_at + interval '15 minutes' FROM ems.stream_views WHERE org_id = %s", co["org_id"])[0][0]
 
 
 def test_daily_events_are_emitted_once(company, worker_engine, admin_sql, monkeypatch):

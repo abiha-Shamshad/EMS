@@ -26,7 +26,7 @@ def _task(co, assignee) -> str:
     return co["manager"].post(f"/api/v1/projects/{project}/tasks", {"title": "Auth API", "assignee_id": assignee}, idem=True).json()["data"]["id"]
 
 
-def test_fixture_day_totals(company, clock):
+def test_fixture_day_totals(company, clock, admin_sql):
     """TASK-007 expect: check-out totals active 412, idle 38, on_break 45, offline 48 (543 minutes, 09:02-18:05)."""
     co = company(roles=("manager", "employee"))
     bilal = co["employee"]
@@ -38,6 +38,8 @@ def test_fixture_day_totals(company, clock):
                                  "extension_version": "1.0.0"}, "task_id": task}), expect_status=201)
     assert checked_in["minutes_late"] == 0 and checked_in["streaming_required"] is False      # live view is off (OD-02)
     bilal.ext_token, session = checked_in["extension_token"], checked_in["session_id"]
+    # The token expiry is computed from the simulated clock but checked by PostgreSQL against the real one.
+    admin_sql("UPDATE ems.extension_tokens SET expires_at = now() + interval '1 day' WHERE session_id = %s", session)
 
     def beat(at: dt.datetime, state: str):
         clock["now"] = at

@@ -253,6 +253,18 @@ def employee(m: Metrics) -> dict:
 
 
 BUILDERS = {"ceo": ceo, "cto": cto, "cfo": cfo, "coo": coo, "hr": hr_dashboard, "employee": employee}
+# Tiles computed only from leakage_findings. Before the first nightly run they would show 0 / $0.00 as if nothing were at
+# risk, so until organizations.leakage_scanned_at is set they are listed under `unavailable` instead.
+LEAKAGE_TILES = {"leakage", "open_findings", "idle_above_threshold"}
+LEAKAGE_PENDING = "Available after the first nightly leakage scan (01:00 company time)"
+
+
+def hold_leakage_until_scanned(db: Db, board: dict[str, Any]) -> dict[str, Any]:
+    if db.scalar("SELECT leakage_scanned_at FROM ems.organizations") is not None:
+        return board
+    held = [t for t in board["tiles"] if t["key"] in LEAKAGE_TILES]
+    return {**board, "tiles": [t for t in board["tiles"] if t["key"] not in LEAKAGE_TILES],
+            "unavailable": [*board["unavailable"], *(gap(t["key"], LEAKAGE_PENDING) for t in held)]}
 
 
 def _cached(db: Db, role: str, period: str, scope_user: uuid.UUID) -> dict | None:
@@ -269,7 +281,7 @@ def dashboard(role: Literal["ceo", "cto", "cfo", "coo", "hr", "employee"], ctx: 
     payload = _cached(ctx.db, role, period, scope_user)
     if payload is None:
         m = Metrics(ctx, period)
-        payload = to_json({"role": role, "period": m.period, "currency": m.base, **BUILDERS[role](m)})
+        payload = to_json({"role": role, "period": m.period, "currency": m.base, **hold_leakage_until_scanned(ctx.db, BUILDERS[role](m))})
         excluded = m.excluded_currencies()
         if excluded:
             payload["notes"] = [f"Amounts in {', '.join(excluded)} are not included; totals are in {m.base}."]

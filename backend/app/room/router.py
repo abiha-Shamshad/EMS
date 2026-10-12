@@ -47,6 +47,12 @@ def _own_open_session(ctx: Ctx, session_id: uuid.UUID | None, lock: bool = True)
     return session
 
 
+def _disconnect_viewers_of(ctx: Ctx, subject_id: uuid.UUID) -> None:
+    """Sharing stopped (consent withdrawn, break started): drop everyone watching now. Failures are left to the sweep,
+    so the employee's own action never fails because the media server is slow."""
+    room.disconnect_views(ctx.db, livekit.MediaConfig.of(ctx.settings), room.open_views_involving(ctx.db, subject_id, as_viewer=False))
+
+
 def _derived_presence(session: dict, now: dt.datetime) -> str:
     """Presence as of `now`, even if the every-minute offline sweep has not run yet (PRS-02)."""
     last = session["last_heartbeat_at"] or session["started_at"]
@@ -75,6 +81,7 @@ def consent(body: ConsentIn, ctx: SessionCtx):
         ctx.db.execute("UPDATE ems.stream_consents SET revoked_at = :t WHERE user_id = :u AND revoked_at IS NULL",
                        t=revoked_at, u=ctx.user_id)
         ctx.db.execute("UPDATE ems.work_sessions SET streaming = false WHERE user_id = :u AND state = 'open'", u=ctx.user_id)
+        _disconnect_viewers_of(ctx, ctx.user_id)
         ctx.audit("room.consent_revoked", "stream_consent", ctx.user_id)
         ctx.emit("room.consent_changed", {"user_id": str(ctx.user_id), "accepted": False, "policy_version": current})
         return ok({"policy_version": current, "revoked_at": revoked_at, "stream_stopped": True},
@@ -243,6 +250,7 @@ def request_break(body: BreakIn, ctx: EitherCtx):
     if within:
         room.change_presence(db, session, "on_break", session["current_task_id"], now)
         db.execute("UPDATE ems.work_sessions SET streaming = false WHERE id = :s", s=session["id"])
+        _disconnect_viewers_of(ctx, ctx.user_id)
     ctx.audit("room.break_requested", "break", break_id)
     ctx.emit("room.break_requested", {"user_id": str(ctx.user_id), "break_id": str(break_id), "kind": body.kind,
                                       "minutes": body.minutes, "needs_approval": not within})
@@ -280,6 +288,7 @@ def decide_break(break_id: uuid.UUID, body: BreakDecisionIn, ctx: SessionCtx):
                    t=now, me=ctx.user_id, b=break_id)
         room.change_presence(db, session, "on_break", session["current_task_id"], now)
         db.execute("UPDATE ems.work_sessions SET streaming = false WHERE id = :s", s=session["id"])
+        _disconnect_viewers_of(ctx, brk["user_id"])
     else:
         db.execute("UPDATE ems.breaks SET status = 'rejected', decided_by = :me WHERE id = :b", me=ctx.user_id, b=break_id)
     ctx.audit("room.break_decided", "break", break_id, ["status"])
@@ -408,8 +417,8 @@ def open_view(body: ViewIn, ctx: SessionCtx):
     if session is None or not session["streaming"] or state in ("on_break", "offline"):
         raise ApiError("STREAM_NOT_LIVE", f"{_first_name(subject['name'])} is not sharing right now (on break or not checked in).",
                        {"presence": state})
-    token = livekit.view_token(ctx.settings, ctx.org_id, body.subject_user_id, ctx.user_id)
     view_id = uuid.uuid4()
+    token = livekit.view_token(ctx.settings, ctx.org_id, body.subject_user_id, view_id)
     db.execute("INSERT INTO ems.stream_views (id, org_id, viewer_id, subject_user_id, reason, started_at) "
                "VALUES (:id, :org, :v, :s, :r, :t)", id=view_id, org=ctx.org_id, v=ctx.user_id, s=body.subject_user_id,
                r=body.reason, t=now)
@@ -427,11 +436,18 @@ def open_view(body: ViewIn, ctx: SessionCtx):
 # ------------------------------------------------------------------------------------------------ API-027
 @router.post("/stream/view/{view_id}/end")
 def end_view(view_id: uuid.UUID, ctx: SessionCtx):
-    view = ctx.db.one("SELECT id, started_at, ended_at FROM ems.stream_views WHERE id = :v AND viewer_id = :me", v=view_id, me=ctx.user_id)
+    view = ctx.db.one("SELECT id, org_id, subject_user_id, started_at, ended_at FROM ems.stream_views WHERE id = :v AND viewer_id = :me",
+                      v=view_id, me=ctx.user_id)
     if view is None:
         raise not_found("View")
     if view["ended_at"] is None:
-        view["ended_at"] = ctx.db.scalar("UPDATE ems.stream_views SET ended_at = now() WHERE id = :v RETURNING ended_at", v=view_id)
+        # The view is recorded as ended only once the viewer is really disconnected; on failure the client retries.
+        try:
+            livekit.remove_viewer(livekit.MediaConfig.of(ctx.settings), view["org_id"], view["subject_user_id"], view_id)
+        except livekit.MediaError as exc:
+            raise ApiError("MEDIA_UNAVAILABLE", "Could not close the live view right now. Try again in a moment.") from exc
+        ctx.db.execute("UPDATE ems.stream_views SET ended_at = now() WHERE id = :v AND ended_at IS NULL", v=view_id)
+        view["ended_at"] = ctx.db.scalar("SELECT ended_at FROM ems.stream_views WHERE id = :v", v=view_id)   # or the sweep's time
         ctx.audit("room.stream_view_ended", "stream_view", view_id, ["ended_at"])
     return ok({"view_id": view_id, "started_at": view["started_at"], "ended_at": view["ended_at"],
                "seconds": int((view["ended_at"] - view["started_at"]).total_seconds())})

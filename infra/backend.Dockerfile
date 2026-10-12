@@ -21,6 +21,6 @@ COPY backend/alembic.ini ./
 USER ems
 EXPOSE 8000
 # Client IPs (used by rate limits) come from X-Forwarded-For only when the request arrives from a trusted proxy.
-# Set FORWARDED_ALLOW_IPS to the load balancer's address range; uvicorn's default trusts only 127.0.0.1.
-# Never use "*": any client could then spoof its IP and bypass the per-IP limits.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# FORWARDED_ALLOW_IPS (the load balancer's address range) is required: app.serve refuses to start without it or with "*",
+# then passes it to uvicorn together with --proxy-headers.
+CMD ["python", "-m", "app.serve"]

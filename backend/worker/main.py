@@ -2,22 +2,25 @@
 
 Connects as ems_worker (WORKER_DATABASE_URL). The outbox scan sees only unpublished rows across companies (DB-14);
 each event is handled inside its own company's RLS context and marked published in the same transaction.
-A failing event is retried with exponential back-off; after 10 attempts it is logged as poison and skipped by this
-process (it stays unpublished, so it is visible to operators and is retried after a restart).
+Retry state is stored on the event (db/004): a failing event gets `attempts` + 1 and `next_attempt_at` with exponential
+back-off, and is marked `dead` after 10 attempts. The scan only takes events that are due and not dead, so failing
+events can never block the rest of the outbox, and the counts survive a restart. Dead events stay unpublished for
+operators (see MAINTENANCE_NOTES).
 """
 import logging
 import os
 import signal
 import threading
-import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import Engine, text
 
+import worker.automation  # noqa: F401 - registers rule, starter-rule and nightly handlers
 import worker.handlers  # noqa: F401 - registers handlers
 import worker.jobs  # noqa: F401 - registers scheduled-event handlers
 from app.platform.db import make_engine, transaction
 from app.platform.web import configure_logging
+from app.room.livekit import MediaConfig
 from worker.registry import HANDLERS, Event
 
 log = logging.getLogger("ems.worker")
@@ -27,8 +30,6 @@ POLL_SECONDS, BATCH, MAX_ATTEMPTS, MAX_BACKOFF = 1.0, 100, 10, 300
 class OutboxLoop:
     def __init__(self, engine: Engine):
         self.engine = engine
-        self.attempts: dict = {}
-        self.retry_at: dict = {}
         self.stop = threading.Event()
 
     def process(self, event_id, org_id) -> None:
@@ -43,25 +44,30 @@ class OutboxLoop:
                 handler(db, event)
             db.execute("UPDATE ems.outbox_events SET published_at = now() WHERE id = :id", id=event_id)
 
+    def record_failure(self, event_id, org_id) -> tuple[int, bool]:
+        """Count the failed attempt in its own transaction (the handler's transaction was rolled back)."""
+        with transaction(self.engine) as db:
+            db.set_context(org_id, None)
+            row = db.one("UPDATE ems.outbox_events SET attempts = attempts + 1, dead = attempts + 1 >= :max, "
+                         "next_attempt_at = now() + make_interval(secs => least(power(2, attempts + 1), :cap)) "
+                         "WHERE id = :id AND published_at IS NULL RETURNING attempts, dead",
+                         id=event_id, max=MAX_ATTEMPTS, cap=MAX_BACKOFF)
+        return (row["attempts"], row["dead"]) if row else (0, False)
+
     def run_once(self) -> int:
         with self.engine.connect() as conn:
-            rows = conn.execute(text("SELECT id, org_id FROM ems.outbox_events WHERE published_at IS NULL ORDER BY created_at LIMIT :n"),
+            rows = conn.execute(text("SELECT id, org_id FROM ems.outbox_events WHERE published_at IS NULL AND NOT dead "
+                                     "AND (next_attempt_at IS NULL OR next_attempt_at <= now()) ORDER BY created_at LIMIT :n"),
                                 {"n": BATCH}).all()
-        done, now = 0, time.monotonic()
+        done = 0
         for event_id, org_id in rows:
-            if self.attempts.get(event_id, 0) >= MAX_ATTEMPTS or self.retry_at.get(event_id, 0) > now:
-                continue
             try:
                 self.process(event_id, org_id)
-                self.attempts.pop(event_id, None)
-                self.retry_at.pop(event_id, None)
                 done += 1
             except Exception:
-                n = self.attempts.get(event_id, 0) + 1
-                self.attempts[event_id] = n
-                self.retry_at[event_id] = now + min(2 ** n, MAX_BACKOFF)
-                level = logging.ERROR if n >= MAX_ATTEMPTS else logging.WARNING
-                log.log(level, "poison event skipped" if n >= MAX_ATTEMPTS else "event handler failed; will retry", exc_info=True,
+                n, dead = self.record_failure(event_id, org_id)
+                log.log(logging.ERROR if dead else logging.WARNING,
+                        "event marked dead after the last attempt" if dead else "event handler failed; will retry", exc_info=True,
                         extra={"fields": {"event_id": str(event_id), "org_id": str(org_id), "attempt": n}})
         return done
 
@@ -79,10 +85,12 @@ def main() -> None:
     if not url:
         raise SystemExit("WORKER_DATABASE_URL is required (connect as ems_worker).")
     configure_logging(os.environ.get("LOG_LEVEL", "info").upper())
-    engine = make_engine(url)
+    engine, media = make_engine(url), MediaConfig.from_env()      # LiveKit: to disconnect viewers in the sweep
     loop = OutboxLoop(engine)
     scheduler = BackgroundScheduler(timezone="UTC")
-    scheduler.add_job(worker.jobs.tick, "cron", second=0, args=[engine], id="minute_tick", max_instances=1, coalesce=True)
+    scheduler.add_job(worker.jobs.tick, "cron", second=0, args=[engine, media], id="minute_tick", max_instances=1, coalesce=True)
+    scheduler.add_job(worker.automation.crawl_next_hunt, "interval", seconds=15, args=[engine], id="lead_hunter", max_instances=1,
+                      coalesce=True)                                  # one hunt at a time; a crawl runs for minutes
     scheduler.start()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: loop.stop.set())

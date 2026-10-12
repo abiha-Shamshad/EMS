@@ -17,10 +17,6 @@ def _name(db: Db, user_id: Any) -> str:
     return db.scalar("SELECT name FROM ems.users WHERE id = :u", u=user_id) or "Former member"
 
 
-def _role_holders(db: Db, *roles: str) -> list[uuid.UUID]:
-    return [r["user_id"] for r in db.all("SELECT user_id FROM ems.memberships WHERE status = 'active' AND role = ANY(:r)", r=list(roles))]
-
-
 def person_node(db: Db, org_id: uuid.UUID, user_id: Any) -> uuid.UUID:
     return graph.ensure_node(db, org_id, "person", user_id, _name(db, user_id))
 
@@ -29,7 +25,7 @@ def person_node(db: Db, org_id: uuid.UUID, user_id: Any) -> uuid.UUID:
 @handles("member.invited")
 def notify_invitation(db: Db, e: Event) -> None:
     actor = _uid(e.payload.get("actor_id"))
-    recipients = [u for u in _role_holders(db, "ceo", "hr") if u != actor]
+    recipients = [u for u in hr.role_holders(db, "ceo", "hr") if u != actor]
     events.notify(db, e.org_id, recipients, e.routing_key, f"{_name(db, actor)} invited a new {e.payload.get('role', 'member')}",
                   "invitation", _uid(e.payload.get("invitation_id")))
 
@@ -37,7 +33,7 @@ def notify_invitation(db: Db, e: Event) -> None:
 @handles("member.joined")
 def member_joined(db: Db, e: Event) -> None:
     user_id = _uid(e.payload["user_id"])
-    recipients = [_uid(e.payload.get("invited_by")), *_role_holders(db, "ceo")]
+    recipients = [_uid(e.payload.get("invited_by")), *hr.role_holders(db, "ceo")]
     events.notify(db, e.org_id, [u for u in recipients if u and u != user_id], e.routing_key,
                   f"{_name(db, user_id)} joined as {e.payload.get('role')}", "membership", user_id)
     person_node(db, e.org_id, user_id)

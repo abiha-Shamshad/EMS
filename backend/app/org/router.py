@@ -11,7 +11,7 @@ from app.auth.sessions import set_session_cookies, start_session
 from app.platform import events
 from app.platform.context import DbDep, SessionCtx, SessionUser, load_org, optional_session_user, settings_of
 from app.platform.db import jsonb
-from app.platform.errors import ApiError, invalid, not_found, version_conflict
+from app.platform.errors import ApiError, denied, invalid, not_found, version_conflict
 from app.platform.idempotency import IdemKey, run_once
 from app.platform.pagination import clamp_limit, decode_cursor, page
 from app.platform.permissions import MATRIX, ROLES, TEAM, roles_with
@@ -21,6 +21,7 @@ from app.platform.schema import Body, Email, ExpectedVersion, Money
 from app.platform.security import check_password_policy, hash_password, new_token, sha256
 from app.platform.serialize import money
 from app.platform.timeutil import WEEKDAYS, utcnow, valid_time_zone
+from app.room import livekit
 from app.room import service as room
 
 router = APIRouter(prefix="/api/v1")
@@ -28,7 +29,14 @@ router = APIRouter(prefix="/api/v1")
 SETUP_ORDER = ["account_created", "company_setup_done", "team_invited", "active"]
 NEXT_STEP = {"account_created": "company_setup", "company_setup_done": "invite_team", "team_invited": "invite_team", "active": "done"}
 INVITE_ROLES = ("cto", "cfo", "coo", "hr", "manager", "employee")
+CEO_GRANTED_ROLES = ("cto", "cfo", "coo")         # leadership roles only the CEO can give (by invitation or role change)
 INVITE_TTL = dt.timedelta(days=7)
+
+
+def require_can_grant(ctx, role: str) -> None:
+    """HR holds members.manage, but must not be able to hand out leadership roles (to others or, via a colleague, itself)."""
+    if role in CEO_GRANTED_ROLES and ctx.role != "ceo":
+        raise denied("Only the CEO can give the CTO, CFO or COO role.")
 
 
 def _advance_setup(ctx_db, org: dict, target: str) -> str:
@@ -113,6 +121,8 @@ def invite(body: InviteIn, ctx: SessionCtx, idem: IdemKey):
            for i, r in enumerate(body.invites) if r.role not in INVITE_ROLES}
     if bad:
         raise invalid("Check the highlighted rows.", bad)
+    for row in body.invites:
+        require_can_grant(ctx, row.role)
 
     def handler():
         db, results, invited = ctx.db, [], 0
@@ -249,6 +259,8 @@ def update_member(user_id: uuid.UUID, body: MemberUpdateIn, ctx: SessionCtx):
         ctx.require("finance.manage", "Only the CEO and CFO can set cost rates.")
     if fields - {"cost_rate"}:
         ctx.require("members.manage", "Only the CEO and HR can change members.")
+    if "role" in fields and user_id == ctx.user_id:
+        raise denied("You cannot change your own role.")
     m = ctx.db.one("SELECT user_id, role, status, version FROM ems.memberships WHERE user_id = :u FOR UPDATE", u=user_id)
     if m is None:
         raise not_found("Member")
@@ -258,6 +270,8 @@ def update_member(user_id: uuid.UUID, body: MemberUpdateIn, ctx: SessionCtx):
         raise ApiError("ONE_CEO_ONLY", "A company has exactly one CEO. Transfer the CEO role from the CEO's own settings.")
     if "role" in fields and body.role is None:
         raise invalid("Choose a role.", {"role": "Required."})
+    if "role" in fields:
+        require_can_grant(ctx, body.role)
     if body.manager_id is not None:
         if body.manager_id == user_id:
             raise invalid("A person cannot be their own manager.", {"manager_id": "Choose someone else."})
@@ -323,8 +337,7 @@ def deactivate_member(user_id: uuid.UUID, body: DeactivateIn, ctx: SessionCtx, i
         if session is not None:
             room.close_session(db, session, utcnow(), "closed")
         db.execute("UPDATE ems.extension_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL", u=user_id)
-        db.execute("UPDATE ems.stream_views SET ended_at = now() WHERE ended_at IS NULL AND (subject_user_id = :u OR viewer_id = :u)",
-                   u=user_id)
+        room.disconnect_views(db, livekit.MediaConfig.of(ctx.settings), room.open_views_involving(db, user_id))   # failures: sweep
         db.execute("UPDATE ems.memberships SET status = 'deactivated', version = version + 1 WHERE user_id = :u", u=user_id)
         ctx.audit("member.deactivated", "membership", user_id, ["status"])
         ctx.emit("member.deactivated", {"user_id": str(user_id), "reassign_to": str(to) if to else None})
