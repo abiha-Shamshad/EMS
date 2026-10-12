@@ -2,9 +2,9 @@
 import datetime as dt
 import uuid
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import Field
 from sqlalchemy.exc import IntegrityError
 
@@ -12,6 +12,7 @@ from app.platform.context import SessionCtx
 from app.platform.db import Db
 from app.platform.errors import ApiError, invalid, not_found
 from app.platform.idempotency import IdemKey, run_once
+from app.platform.pagination import clamp_limit, decode_cursor, page
 from app.platform.responses import ok
 from app.platform.schema import Body, Currency, Money
 from app.platform.serialize import money
@@ -22,6 +23,29 @@ router = APIRouter(prefix="/api/v1/invoices")
 def outstanding(db: Db, invoice_id: uuid.UUID, amount: Decimal) -> Decimal:
     paid = db.scalar("SELECT coalesce(sum(amount), 0) FROM ems.payments WHERE invoice_id = :i", i=invoice_id)
     return Decimal(amount) - Decimal(paid)
+
+
+# ------------------------------------------------------------------------------------------------ invoice list (web)
+@router.get("")
+def list_invoices(ctx: SessionCtx, status: Literal["sent", "partially_paid", "paid", "void"] | None = None, client_id: uuid.UUID | None = None,
+                  cursor: str | None = None, limit: Annotated[int | None, Query()] = None):
+    """Recorded invoices with what is still outstanding. Read-only companion to API-053/054."""
+    ctx.require("finance.manage", "Only the CEO and CFO can see invoices.")
+    limit, after = clamp_limit(limit), decode_cursor(cursor, 2)
+    rows = ctx.db.all(
+        "SELECT i.id, i.number, i.client_id, co.name AS client, i.project_id, p.name AS project, i.amount, i.currency, i.issued_on, "
+        "i.due_on, i.status, coalesce(pay.paid, 0) AS paid FROM ems.invoices i JOIN ems.clients c ON c.id = i.client_id "
+        "JOIN ems.companies co ON co.id = c.company_id LEFT JOIN ems.projects p ON p.id = i.project_id "
+        "LEFT JOIN (SELECT invoice_id, sum(amount) AS paid FROM ems.payments GROUP BY invoice_id) pay ON pay.invoice_id = i.id "
+        "WHERE (CAST(:st AS text) IS NULL OR i.status = :st) AND (CAST(:c AS uuid) IS NULL OR i.client_id = :c) "
+        "AND (CAST(:a_d AS date) IS NULL OR (i.issued_on, i.id) < (CAST(:a_d AS date), CAST(:a_id AS uuid))) "
+        "ORDER BY i.issued_on DESC, i.id DESC LIMIT :lim",
+        st=status, c=client_id, a_d=after[0] if after else None, a_id=after[1] if after else None, lim=limit + 1)
+    rows, next_cursor = page(rows, limit, lambda r: [r["issued_on"].isoformat(), str(r["id"])])
+    keys = ("id", "number", "client_id", "client", "project_id", "project", "currency", "issued_on", "due_on", "status")
+    return ok({"items": [{**{k: r[k] for k in keys}, "amount": money(r["amount"]), "paid": money(r["paid"]),
+                          "outstanding": money(Decimal(r["amount"]) - Decimal(r["paid"]))} for r in rows],
+               "next_cursor": next_cursor})
 
 
 # ------------------------------------------------------------------------------------------------ API-053

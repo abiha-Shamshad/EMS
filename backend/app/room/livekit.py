@@ -63,10 +63,15 @@ def _require_configured(settings: Settings) -> None:
         raise ApiError("MEDIA_UNAVAILABLE", "Live screen sharing is not available right now. Presence keeps working.")
 
 
-def publish_token(settings: Settings, org_id: uuid.UUID, user_id: uuid.UUID) -> str:
+def publish_sources(camera: bool) -> list[str]:
+    """Screen share always; the webcam only with the employee's webcam opt-in. Never the microphone."""
+    return ["screen_share", "camera"] if camera else ["screen_share"]
+
+
+def publish_token(settings: Settings, org_id: uuid.UUID, user_id: uuid.UUID, camera: bool = False) -> str:
     _require_configured(settings)
     grants = api.VideoGrants(room_join=True, room=room_name(org_id, user_id), can_publish=True, can_subscribe=False,
-                             can_publish_data=False, can_publish_sources=["screen_share"])
+                             can_publish_data=False, can_publish_sources=publish_sources(camera))
     return (api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
             .with_identity(f"employee:{user_id}").with_ttl(dt.timedelta(seconds=PUBLISH_TTL_SECONDS))
             .with_grants(grants).to_jwt())

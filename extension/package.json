@@ -1,0 +1,19 @@
+{
+  "name": "ems-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EMS Employee Room Chrome extension (Manifest V3): consent, check-in/out, presence heartbeats, breaks and the Media Session Page.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "livekit-client": "2.22.4"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.1.43",
+    "typescript": "5.9.3"
+  }
+}

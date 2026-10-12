@@ -18,9 +18,16 @@ log = logging.getLogger("ems.room")
 
 OFFLINE_AFTER = dt.timedelta(seconds=presence_engine.OFFLINE_AFTER)
 HEARTBEAT = dt.timedelta(seconds=presence_engine.HEARTBEAT_SECONDS)
-SESSION_COLUMNS = "id, org_id, user_id, started_at, ended_at, state, current_task_id, last_heartbeat_at, presence, streaming"
+SESSION_COLUMNS = "id, org_id, user_id, started_at, ended_at, state, current_task_id, last_heartbeat_at, presence, streaming, camera"
 CONSENT_COVERS = ["presence", "idle_state", "current_task", "live_screen_while_checked_in"]
 CONSENT_EXCLUDES = ["recording", "keystrokes", "browsing_history", "webcam", "microphone"]
+
+
+def consent_scope(webcam: bool) -> tuple[list[str], list[str]]:
+    """What a consent covers and excludes. The webcam is a separate opt-in (db/006); microphone and recording never."""
+    if not webcam:
+        return CONSENT_COVERS, CONSENT_EXCLUDES
+    return [*CONSENT_COVERS, "live_webcam_while_checked_in"], [x for x in CONSENT_EXCLUDES if x != "webcam"]
 
 
 def open_session(db: Db, user_id: uuid.UUID, lock: bool = False) -> dict[str, Any] | None:
@@ -36,6 +43,16 @@ def session_by_id(db: Db, session_id: uuid.UUID, lock: bool = False) -> dict[str
 def has_current_consent(db: Db, user_id: uuid.UUID, policy_version: int) -> bool:
     return bool(db.scalar("SELECT 1 FROM ems.stream_consents WHERE user_id = :u AND policy_version = :v AND revoked_at IS NULL",
                           u=user_id, v=policy_version))
+
+
+def has_webcam_consent(db: Db, user_id: uuid.UUID, policy_version: int) -> bool:
+    return bool(db.scalar("SELECT 1 FROM ems.stream_consents WHERE user_id = :u AND policy_version = :v AND revoked_at IS NULL AND webcam",
+                          u=user_id, v=policy_version))
+
+
+def camera_allowed(db: Db, org: dict, user_id: uuid.UUID) -> bool:
+    """Live view enabled for the company (OD-02) and the employee opted in to the webcam for the current notice."""
+    return bool(org["live_view_enabled"]) and has_webcam_consent(db, user_id, org["room_policy_version"])
 
 
 def streaming_allowed(db: Db, org: dict, user_id: uuid.UUID) -> bool:
@@ -138,7 +155,7 @@ def close_session(db: Db, session: dict, end_at: dt.datetime, state: str = "clos
     db.execute("UPDATE ems.breaks SET status = 'ended', ended_at = :e WHERE session_id = :s AND status = 'active'",
                e=end_at, s=session["id"])
     db.execute("UPDATE ems.breaks SET status = 'rejected' WHERE session_id = :s AND status = 'requested'", s=session["id"])
-    db.execute("UPDATE ems.work_sessions SET state = :st, ended_at = :e, streaming = false WHERE id = :s",
+    db.execute("UPDATE ems.work_sessions SET state = :st, ended_at = :e, streaming = false, camera = false WHERE id = :s",
                st=state, e=end_at, s=session["id"])
     db.execute("UPDATE ems.extension_tokens SET revoked_at = now() WHERE session_id = :s AND revoked_at IS NULL", s=session["id"])
     segs = segments_of(db, [session["id"]])
@@ -157,14 +174,14 @@ def open_views_involving(db: Db, user_id: uuid.UUID, as_viewer: bool = True) -> 
 
 def views_to_disconnect(db: Db, token_lifetime: dt.timedelta) -> list[dict[str, Any]]:
     """Open views that must end: past the view token lifetime, live view switched off for the company, the viewer
-    deactivated, or the employee no longer sharing (checked out, on a break, consent withdrawn, offline).
+    deactivated, or the employee sharing neither screen nor webcam (checked out, on a break, consent withdrawn, offline).
     Runs under one company's RLS context."""
     return db.all(
         f"SELECT {VIEW_COLUMNS} FROM ems.stream_views v JOIN ems.organizations o ON o.id = v.org_id "  # noqa: S608 - constant columns
         "LEFT JOIN ems.work_sessions s ON s.user_id = v.subject_user_id AND s.state = 'open' "
         "JOIN ems.memberships viewer ON viewer.user_id = v.viewer_id "
         "WHERE v.ended_at IS NULL AND (v.started_at < now() - :life OR NOT o.live_view_enabled OR viewer.status <> 'active' "
-        "OR s.id IS NULL OR NOT s.streaming OR s.presence IN ('on_break', 'offline') "
+        "OR s.id IS NULL OR NOT (s.streaming OR s.camera) OR s.presence IN ('on_break', 'offline') "
         "OR NOT EXISTS (SELECT 1 FROM ems.stream_consents c WHERE c.user_id = v.subject_user_id "
         "               AND c.policy_version = o.room_policy_version AND c.revoked_at IS NULL)) "
         "ORDER BY v.started_at", life=token_lifetime)

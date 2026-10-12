@@ -1,0 +1,30 @@
+{
+  "name": "ems-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EMS Release 1 web app (Next.js App Router). Talks to the FastAPI backend through the /api/v1 rewrite.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/lib/*.test.ts"
+  },
+  "dependencies": {
+    "@livekit/components-react": "2.9.24",
+    "livekit-client": "2.22.4",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tslib": "2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -224,6 +224,41 @@ def pipeline(ctx: SessionCtx, owner_id: uuid.UUID | None = None, currency: Annot
                "won_this_month": {"count": won["count"], "amount": money(won["amount"])}, "stale_count": stale})
 
 
+# ------------------------------------------------------------------------------------------------ deals board (web)
+@router.get("/deals")
+def list_deals(ctx: SessionCtx, stage: Literal["new", "qualified", "proposal", "negotiation", "won", "lost"] | None = None,
+               owner_id: uuid.UUID | None = None, cursor: str | None = None, limit: Annotated[int | None, Query()] = None):
+    """Deal cards for the pipeline board. Read-only companion to API-049 (the contract has totals, not cards)."""
+    _require_crm_read(ctx)
+    limit, after = clamp_limit(limit), decode_cursor(cursor, 2)
+    rows = ctx.db.all(
+        "SELECT d.id, d.title, d.stage, d.amount, d.currency, d.expected_close, d.last_activity_at, d.version, d.owner_id, "
+        "u.name AS owner, c.id AS contact_id, c.name AS contact, co.name AS company FROM ems.deals d "
+        "JOIN ems.users u ON u.id = d.owner_id JOIN ems.contacts c ON c.id = d.contact_id LEFT JOIN ems.companies co ON co.id = c.company_id "
+        "WHERE (CAST(:st AS text) IS NULL OR d.stage = :st) AND (CAST(:o AS uuid) IS NULL OR d.owner_id = :o) "
+        "AND (CAST(:a_t AS timestamptz) IS NULL OR (d.last_activity_at, d.id) < (CAST(:a_t AS timestamptz), CAST(:a_id AS uuid))) "
+        "ORDER BY d.last_activity_at DESC, d.id DESC LIMIT :lim",
+        st=stage, o=owner_id, a_t=after[0] if after else None, a_id=after[1] if after else None, lim=limit + 1)
+    rows, next_cursor = page(rows, limit, lambda r: [r["last_activity_at"].isoformat(), str(r["id"])])
+    stale_before = utcnow() - dt.timedelta(days=STALE_DAYS)
+    return ok({"items": [{"id": r["id"], "title": r["title"], "stage": r["stage"], "amount": money(r["amount"]), "currency": r["currency"],
+                          "expected_close": r["expected_close"], "last_activity_at": r["last_activity_at"], "version": r["version"],
+                          "owner": {"id": r["owner_id"], "name": r["owner"]}, "contact": {"id": r["contact_id"], "name": r["contact"]},
+                          "company": r["company"], "stale": r["stage"] in OPEN_STAGES and r["last_activity_at"] < stale_before}
+                         for r in rows], "next_cursor": next_cursor})
+
+
+@router.get("/clients")
+def list_clients(ctx: SessionCtx, status: Literal["onboarding", "active", "at_risk", "churned"] | None = None):
+    """Clients for the invoice and project forms. Read-only (CRM or finance access)."""
+    if not (ctx.can("crm.manage") or ctx.can("finance.manage")):
+        raise denied("Only sales, finance and leadership can list clients.")
+    rows = ctx.db.all("SELECT c.id, co.name, c.status, c.since, c.renewal_date, d.title AS origin_deal FROM ems.clients c "
+                      "JOIN ems.companies co ON co.id = c.company_id JOIN ems.deals d ON d.id = c.origin_deal_id "
+                      "WHERE CAST(:st AS text) IS NULL OR c.status = :st ORDER BY co.name", st=status)
+    return ok({"items": rows})
+
+
 def _activity(ctx: Ctx, entity_type: str, entity_id: uuid.UUID, kind: str, note: str | None, at: dt.datetime) -> uuid.UUID:
     activity_id = uuid.uuid4()
     ctx.db.execute("INSERT INTO ems.activities (id, org_id, entity_type, entity_id, kind, note, actor_id, occurred_at) "

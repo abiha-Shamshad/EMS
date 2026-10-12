@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EMS sharing</title>
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <h1>EMS screen and webcam sharing</h1>
+      <div id="viewers" aria-live="assertive"></div>
+      <div id="status" class="card" aria-live="polite"></div>
+      <video id="preview" autoplay muted playsinline hidden></video>
+      <p class="muted">Keep this tab open while you work. Chrome shows its own sharing and camera indicators; you can stop at any time here, from Chrome or by closing this tab.
+        Nothing is recorded, no audio is captured, and sharing pauses during breaks.</p>
+    </div>
+    <script type="module" src="media.js"></script>
+  </body>
+</html>

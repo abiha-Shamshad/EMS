@@ -29,6 +29,16 @@ python -m worker.main                          # worker (separate process)
 
 ---
 
+### Web app and extension
+
+```bash
+cd ems/web && npm ci && EMS_API_ORIGIN=http://127.0.0.1:8000 npm run dev         # http://localhost:3000
+cd ems/extension && npm ci && EMS_ORIGIN=http://localhost:3000 npm run build     # load dist/ unpacked in Chrome
+```
+
+Set the API's `APP_BASE_URL` to the web URL and `EXTENSION_ID` to the loaded extension's ID. `EMS_API_ORIGIN` is read
+when the web app is **built**: rebuild after changing it. Production: `npm run build && npm start` behind the same domain.
+
 ## 2. Checks (same as CI)
 
 Run from `ems/` unless noted. CI is `.github/workflows/ci.yml` (PostgreSQL 17 service, trust auth).
@@ -39,8 +49,10 @@ Run from `ems/` unless noted. CI is `.github/workflows/ci.yml` (PostgreSQL 17 se
 | Engine tests (G2) | `cd backend/app && python -m unittest engine.tests.test_engine` | 21 pass |
 | Spec consistency | `python tools/check_spec.py` | CHK-01..12 pass |
 | LiveKit grants | `python tools/check_livekit_tokens.py` | LK-01..03 pass |
-| DB checks | apply `db/001`..`005` to a fresh DB, then `PGDATABASE=<db> PGUSER=postgres python db/verify_ems_db.py` | DB-01..18 pass |
+| DB checks | apply `db/001`..`006` to a fresh DB, then `PGDATABASE=<db> PGUSER=postgres python db/verify_ems_db.py` | DB-01..18 pass |
 | Alembic | `ADMIN_DATABASE_URL=... alembic upgrade head` on an empty DB | applies cleanly |
+| Web | `cd web && npm run lint && npm run typecheck && npm test && npm run build` | clean, 45 routes |
+| Extension | `cd extension && npm run typecheck && npm run build && npm test` | builds `dist/`, tests pass |
 | Integration tests | `cd backend && TEST_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres pytest` | all pass |
 
 Notes:
@@ -182,10 +194,10 @@ migration, then deploying the previous image. Take a backup before every migrati
 ## 6. Common maintenance tasks
 
 **Add a schema change**
-1. Write `db/005_<name>.sql` following the 001–004 conventions: `SET ROLE ems_owner`, `search_path = ems, public`,
+1. Write `db/007_<name>.sql` following the 001–006 conventions: `SET ROLE ems_owner`, `search_path = ems, public`,
    `ENABLE` + `FORCE ROW LEVEL SECURITY` and an `org_isolation` policy on every new table, explicit grants to
    `ems_app` / `ems_worker`, bootstrap functions owned by `ems_lookup` with `REVOKE ALL FROM PUBLIC`.
-2. Add `migrations/versions/0004_<name>.py` calling `run_sql_file("005_<name>.sql")`.
+2. Add `migrations/versions/0006_<name>.py` calling `run_sql_file("007_<name>.sql")`.
 3. Add the file to `tests/conftest.py` (its list of SQL files) and to the CI "Database checks" step.
 4. Re-run `db/verify_ems_db.py`; all DB checks must still pass.
 
@@ -227,6 +239,8 @@ routing key to `TRIGGER_FOR_EVENT` so the worker runs rules for it.
 - Money must be `Decimal` from strings. Floats are rejected by design.
 - A worker without `LIVEKIT_*` cannot disconnect viewers: with LiveKit configured on the API only, views would never be
   removed by the sweep. Configure both or neither.
+- The webcam deviates from spec Section 9.1. Keep its safeguards when changing room code: separate opt-in, only while
+  checked in, paused on breaks, no recording, no audio, every view logged with a reason and the employee notified.
 - Dead outbox events are not retried by a restart; they need the requeue SQL above.
 - Running pytest without `TEST_ADMIN_DATABASE_URL` skips the integration suite and still reports success.
 - `ems/EMS_R1_v1.0_pack/` (outside `ems/`) is the original pack; `ems/` is the working copy. Edit `ems/` only.
@@ -237,7 +251,7 @@ routing key to `TRIGGER_FOR_EVENT` so the worker runs rules for it.
 
 | ID | Effect today |
 |---|---|
-| OD-02 | Live viewing stays off (`live_view_enabled = false`, no API to enable it). |
+| OD-02 | Live viewing stays off (`live_view_enabled = false`, no API to enable it). This now covers the opt-in live webcam and the CEO video wall: the legal review must approve both before the flag is set. |
 | OD-03 | Chrome Web Store publication; `EXTENSION_ID` set manually. |
 | OD-09 / INT-003 | No email; password reset tokens are not issued; invitations rely on copyable links. |
 | OD-06 / INT-006 | No language-model features; the HR Agent is pattern-based. |

@@ -77,8 +77,10 @@ TEST_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres pytest   #
 | Notes without a column | Check-out note and manual-time note -> `activities`; leave decision note -> employee notification; finding resolution note -> `evidence.resolution_note` | The schema has no note columns for these |
 | Project status | First task moved to Active turns a `planned` project `active` (and an onboarding client `active`) | No other operation changes project status in Release 1 |
 | Room time entries | Created at check-out / auto-close, one per task, from active segments | Same minutes as "at task switch"; one code path |
-| Repeat check-in | Returns the open session without a new extension token (per contract) | If the web app checked in first, the extension cannot obtain a token: needs a product decision |
+| Repeat check-in | Returns the open session; from the extension with a session cookie it also revokes old extension tokens and returns a fresh one | Lets the extension attach to a check-in made in the web app |
 | Graph `works_on` | person -> project | Section 16 allows project or task; the API-068 example shows projects |
+| Webcam | API-017 `webcam` (opt-in), API-019 `camera`, API-024 `camera`; `db/006` columns. Live only while checked in, paused on breaks, no recording, no audio | Product-owner decision; deviates from spec Section 9.1 (webcam never collected). OD-02 legal review must cover it |
+| CEO video wall | `POST /room/stream/view-grid` (not in the contract): one logged, notified view per live employee, up to 48, reason required, `room.view_live` | The CEO screen shows all live employees as a grid |
 | Live view off | API-024/026 return 403 while `live_view_enabled = false`; no API can switch it on | OD-02 legal gate |
 | Rule actions | Each action's parameters are validated when the rule is saved (recipients the trigger can resolve, known templates, `set_stage_flag` only `at_risk` on invoice.overdue, `create_finding` only the trigger's own kind) | The engine checks action names only; a saved rule must always be executable |
 | Rule follow-up tasks | `create_task` for a trigger without a project (deal.stale) goes to one internal project, "Automation follow-ups" | `tasks.project_id` is required |
@@ -88,6 +90,7 @@ TEST_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/postgres pytest   #
 | Leakage refresh | A detector hit on a record with an open finding under an older fingerprint refreshes it; open findings no longer detected resolve automatically | Unbilled time is fingerprinted per day; avoid one row per night |
 | HR policy rules | Allowed rule keys per topic (`leave`: `*_days`; `attendance`: grace, break allowance; `breaks`: allowance); publishing applies them to company settings; a `monitoring` policy bumps `room_policy_version` | Section 31.2 "rules reload; consent version bump" |
 | HR Agent scope | Managers see their direct reports only; CTO/CFO/employees get team questions refused by the engine | Section 7.2 team scope |
+| Read-only lists for the web app | `GET /deals`, `/clients`, `/invoices`, `/hunts`, `/room/breaks`, `/org` (not in the contract) | The screens need deal cards, client and invoice pickers, a hunts dashboard, break approvals and the org `version` for API-010; each uses the matching permission |
 | Hunt seeds | Seeds already in the CRM (company domain) or on the suppression list are not crawled; a domain seen in an earlier hunt moves to the new hunt | Prospects are unique per company domain |
 
 ## Security notes

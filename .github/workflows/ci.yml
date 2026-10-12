@@ -1,5 +1,5 @@
 # EMS Release 1 CI (spec Section 35, TASK-001): lint, engine tests, spec checks, LiveKit grant checks,
-# DB-01..18 on PostgreSQL 17, API integration/contract tests. Next.js and extension builds are added by TASK-016 / TASK-011.
+# DB-01..18 on PostgreSQL 17, API integration/contract tests, Next.js web build (TASK-016), extension build (TASK-011).
 name: ci
 on:
   pull_request:
@@ -42,7 +42,7 @@ jobs:
       - name: Database checks (G1, DB-01..18)
         run: |
           createdb -U postgres emsverify
-          psql -U postgres -d emsverify -v ON_ERROR_STOP=1 -f db/001_ems_schema.sql -f db/002_ems_settings_tokens.sql -f db/003_ems_platform_gaps.sql -f db/004_ems_pilot_fixes.sql -f db/005_ems_automation.sql
+          psql -U postgres -d emsverify -v ON_ERROR_STOP=1 -f db/001_ems_schema.sql -f db/002_ems_settings_tokens.sql -f db/003_ems_platform_gaps.sql -f db/004_ems_pilot_fixes.sql -f db/005_ems_automation.sql -f db/006_ems_webcam.sql
           PGDATABASE=emsverify PGUSER=postgres python db/verify_ems_db.py
       - name: Alembic migrations apply cleanly
         working-directory: backend
@@ -54,3 +54,40 @@ jobs:
         env:
           TEST_ADMIN_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
         run: pytest -q
+
+  web:
+    name: Web (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  extension:
+    name: Extension (typecheck + build + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test

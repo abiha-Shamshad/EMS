@@ -195,6 +195,7 @@ Storage is always UTC. `Calendar(time_zone, work_hours)` gives working days, loc
   rule runs and open findings.
 - `db/004` (pre-pilot review fixes): outbox retry state (`attempts`, `next_attempt_at`, `dead`) and
   `organizations.leakage_scanned_at` (set by the nightly leakage job; gates the leakage dashboard tiles).
+- `db/006` (Alembic `0005`): `stream_consents.webcam` and `work_sessions.camera` for the opt-in live webcam.
 
 ---
 
@@ -230,7 +231,16 @@ Storage is always UTC. `Calendar(time_zone, work_hours)` gives working days, loc
   live view is switched off, when the employee stopped sharing or the viewer was deactivated, and retries any
   removal that failed in the API. The API never fails an employee's own action because of a failed removal.
 - Live viewing returns 403 while `organizations.live_view_enabled = false`; **no API can switch it on** (OD-02).
-- Repeat check-in returns the open session without a new extension token (open product question).
+- **Webcam (product decision, deviates from spec Section 9.1)**: `db/006` adds `stream_consents.webcam` and
+  `work_sessions.camera`. The webcam is a separate opt-in on the consent (API-017 `webcam`), live only while checked in,
+  never recorded, no audio, paused on breaks, and only while `live_view_enabled` (`service.camera_allowed`). Heartbeats
+  report `camera` (API-019); the publish token (API-024 `camera`) adds the `camera` source only with webcam consent.
+  A view stays open while the employee shares the screen **or** the webcam (`views_to_disconnect`).
+- **CEO video wall**: `POST /room/stream/view-grid` (not in the contract; `room.view_live`, reason required, up to 48
+  people) opens one logged view per live employee through the same `_start_view` path as API-026, so each employee is
+  notified and each view is audited and ended individually (API-027).
+- Repeat check-in from the extension (`device.kind = chrome_extension`, session auth) after a web check-in revokes
+  old extension tokens and returns a fresh one (audit `room.extension_attached`); other repeats return the open session.
 
 ### HR (`app/hr/`)
 - Leave balances come only from the published `leave` policy rules (`annual_days`, …). No policy → balances `None`,
@@ -363,11 +373,28 @@ called only from worker handlers and must be idempotent. Reads filter node kinds
 | API-027 failure | Returns 503 `MEDIA_UNAVAILABLE` (retryable) when LiveKit can't remove the viewer; the contract lists only 200/404. |
 | Role grants | Nobody changes their own role; only the CEO can give `cto`/`cfo`/`coo` (role change or invitation). Checked after `ONE_CEO_ONLY`. |
 | Leakage run marker | `organizations.leakage_scanned_at`, set at the end of each nightly run (`app/leakage/service.run`). |
+| Webcam | Opt-in live webcam (see Room); a product-owner decision that deviates from spec 9.1. OD-02 legal review must cover it. |
+| Video wall | `POST /room/stream/view-grid` opens one logged, notified view per live employee. |
+| Web check-in | Extension repeat check-in gets a fresh token, so the extension can attach to a web check-in. |
 | Worker LiveKit config | The worker reads `LIVEKIT_URL/_API_KEY/_API_SECRET` from its own environment (all or none) for the view sweep. |
 
 ---
 
-## 8. Out of scope for this backend
+## 8. Web app and Chrome extension
+
+- **Web** (`ems/web/`, Next.js 16.4 App Router, see `web/README.md`): about 35 screens against the real API. `/api/v1/*` is
+  rewritten to the API (`EMS_API_ORIGIN`), so cookies are first-party. `src/lib/api.ts` handles the envelope, CSRF,
+  idempotency keys and `X-Org-Id`; `src/lib/useApi.ts` loads data (state set only in request callbacks, per React 19 lint);
+  money stays a decimal string (`sumMoney` uses integer cents). The SessionProvider guards the signed-in area from `/me`.
+- **Extension** (`ems/extension/`, Manifest V3, see `extension/README.md`): popup (sign-in, consent, check-in/out, breaks),
+  service worker (30 s heartbeat alarm with `chrome.idle`), Media Session Page (LiveKit screen share), settings. Built
+  with `tsc` only; LiveKit's ES module is copied next to the media page. Pure rules live in `src/logic.ts` and are unit-tested.
+- **Backend additions for the screens**: read-only `GET /deals`, `/clients`, `/invoices`, `/hunts`, `/room/breaks`, `/org`
+  (outside the 70-operation contract; tested in `tests/test_web_lists.py`), and `POST /room/stream/view-grid` (tested in
+  `tests/test_webcam.py`). Web pages for them include `/crm/clients`, `/crm/deals`, `/room/wall` (CEO video wall) and
+  check-in/check-out on `/room/me`.
+
+## 9. Out of scope
 
 - Web app and Chrome extension (other team members).
 - Blocked by owner decisions: live viewing of real employees (OD-02), Chrome Web Store (OD-03), email (INT-003 / OD-09;

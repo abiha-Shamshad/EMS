@@ -171,7 +171,7 @@ def test_live_grid_and_audited_views(app, company, database, admin_sql, drain):
                                                                               "reason": "Daily stand-up check"}), expect_status=201)
     assert view["grants"]["can_publish"] is False and view["subject_notified"] is True
     notices = emp.get("/api/v1/notifications").json()["data"]["items"]
-    assert notices[0]["title"] == "Zain Coo is viewing your screen"          # G5: written with the view, not later
+    assert notices[0]["title"] == "Zain Coo is viewing you live: Daily stand-up check"          # G5: written with the view
     seen = assert_contract("API-028", emp.get("/api/v1/room/my-viewers"), expect_status=200)
     assert seen["items"][0]["reason"] == "Daily stand-up check" and seen["items"][0]["seconds"] is None
     closed = assert_contract("API-027", coo.post(f"/api/v1/room/stream/view/{view['view_id']}/end"), expect_status=200)

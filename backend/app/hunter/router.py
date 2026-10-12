@@ -102,6 +102,23 @@ def start_hunt(body: HuntIn, ctx: SessionCtx, idem: IdemKey):
     return run_once(ctx, idem, handler)
 
 
+# ------------------------------------------------------------------------------------------------ hunt list (web)
+@router.get("/hunts")
+def list_hunts(ctx: SessionCtx, cursor: str | None = None, limit: Annotated[int | None, Query()] = None):
+    """Recent hunts for the Lead Hunter dashboard. Read-only companion to API-055/056."""
+    ctx.require("hunter.use", "Only leadership and managers can use the Lead Hunter.")
+    limit, after = clamp_limit(limit), decode_cursor(cursor, 2)
+    rows = ctx.db.all(
+        "SELECT h.id, h.name, h.status, h.stats, h.created_at, u.name AS created_by FROM ems.hunts h JOIN ems.users u ON u.id = h.created_by "
+        "WHERE CAST(:a_t AS timestamptz) IS NULL OR (h.created_at, h.id) < (CAST(:a_t AS timestamptz), CAST(:a_id AS uuid)) "
+        "ORDER BY h.created_at DESC, h.id DESC LIMIT :lim",
+        a_t=after[0] if after else None, a_id=after[1] if after else None, lim=limit + 1)
+    rows, next_cursor = page(rows, limit, lambda r: [r["created_at"].isoformat(), str(r["id"])])
+    return ok({"items": [{"hunt_id": r["id"], "name": r["name"], "status": r["status"], "created_at": r["created_at"],
+                          "created_by": r["created_by"], "stats": {k: int((r["stats"] or {}).get(k, 0)) for k in STATS_KEYS}} for r in rows],
+               "next_cursor": next_cursor})
+
+
 # ------------------------------------------------------------------------------------------------ API-056
 @router.get("/hunts/{hunt_id}")
 def hunt_status(hunt_id: uuid.UUID, ctx: SessionCtx):

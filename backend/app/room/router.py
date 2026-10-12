@@ -53,6 +53,15 @@ def _disconnect_viewers_of(ctx: Ctx, subject_id: uuid.UUID) -> None:
     room.disconnect_views(ctx.db, livekit.MediaConfig.of(ctx.settings), room.open_views_involving(ctx.db, subject_id, as_viewer=False))
 
 
+def _media_state(live_view_enabled: bool, presence: str, on: bool) -> str:
+    """Grid state of one feed (screen or webcam): disabled (OD-02 switch off), paused (break), live or off."""
+    if not live_view_enabled:
+        return "disabled"
+    if presence == "on_break":
+        return "paused"
+    return "live" if on and presence != "offline" else "off"
+
+
 def _derived_presence(session: dict, now: dt.datetime) -> str:
     """Presence as of `now`, even if the every-minute offline sweep has not run yet (PRS-02)."""
     last = session["last_heartbeat_at"] or session["started_at"]
@@ -65,6 +74,7 @@ def _derived_presence(session: dict, now: dt.datetime) -> str:
 class ConsentIn(Body):
     policy_version: int = Field(ge=1)
     accept: bool
+    webcam: bool = False                     # separate opt-in to the live webcam while checked in (db/006)
 
 
 @router.post("/consent")
@@ -80,21 +90,24 @@ def consent(body: ConsentIn, ctx: SessionCtx):
         revoked_at = utcnow()
         ctx.db.execute("UPDATE ems.stream_consents SET revoked_at = :t WHERE user_id = :u AND revoked_at IS NULL",
                        t=revoked_at, u=ctx.user_id)
-        ctx.db.execute("UPDATE ems.work_sessions SET streaming = false WHERE user_id = :u AND state = 'open'", u=ctx.user_id)
+        ctx.db.execute("UPDATE ems.work_sessions SET streaming = false, camera = false WHERE user_id = :u AND state = 'open'", u=ctx.user_id)
         _disconnect_viewers_of(ctx, ctx.user_id)
         ctx.audit("room.consent_revoked", "stream_consent", ctx.user_id)
         ctx.emit("room.consent_changed", {"user_id": str(ctx.user_id), "accepted": False, "policy_version": current})
         return ok({"policy_version": current, "revoked_at": revoked_at, "stream_stopped": True},
-                  "Consent withdrawn. Screen sharing has stopped.")
+                  "Consent withdrawn. Screen and webcam sharing have stopped.")
     consented_at = ctx.db.scalar(
-        "INSERT INTO ems.stream_consents (org_id, user_id, policy_version) VALUES (:org, :u, :v) "
-        "ON CONFLICT (org_id, user_id, policy_version) DO UPDATE SET revoked_at = NULL, consented_at = "
+        "INSERT INTO ems.stream_consents (org_id, user_id, policy_version, webcam) VALUES (:org, :u, :v, :w) "
+        "ON CONFLICT (org_id, user_id, policy_version) DO UPDATE SET revoked_at = NULL, webcam = EXCLUDED.webcam, consented_at = "
         "CASE WHEN ems.stream_consents.revoked_at IS NULL THEN ems.stream_consents.consented_at ELSE now() END "
-        "RETURNING consented_at", org=ctx.org_id, u=ctx.user_id, v=current)
-    ctx.audit("room.consent_given", "stream_consent", ctx.user_id)
-    ctx.emit("room.consent_changed", {"user_id": str(ctx.user_id), "accepted": True, "policy_version": current})
-    return ok({"policy_version": current, "consented_at": consented_at, "covers": room.CONSENT_COVERS,
-               "excludes": room.CONSENT_EXCLUDES}, "Consent recorded.")
+        "RETURNING consented_at", org=ctx.org_id, u=ctx.user_id, v=current, w=body.webcam)
+    if not body.webcam:                                          # webcam opt-out keeps screen consent but stops the camera
+        ctx.db.execute("UPDATE ems.work_sessions SET camera = false WHERE user_id = :u AND state = 'open'", u=ctx.user_id)
+    ctx.audit("room.consent_given", "stream_consent", ctx.user_id, ["webcam"] if body.webcam else None)
+    ctx.emit("room.consent_changed", {"user_id": str(ctx.user_id), "accepted": True, "webcam": body.webcam, "policy_version": current})
+    covers, excludes = room.consent_scope(body.webcam)
+    return ok({"policy_version": current, "consented_at": consented_at, "covers": covers, "excludes": excludes, "webcam": body.webcam},
+              "Consent recorded.")
 
 
 # ------------------------------------------------------------------------------------------------ API-018
@@ -108,14 +121,30 @@ class CheckInIn(Body):
     task_id: uuid.UUID | None = None
 
 
+def _issue_extension_token(ctx: Ctx, session_id: uuid.UUID, now: dt.datetime) -> str:
+    """Bearer token for the extension, bound to one work session (DB-17); only its hash is stored."""
+    token, token_hash = new_token("ext")
+    ctx.db.execute("INSERT INTO ems.extension_tokens (token_hash, org_id, user_id, session_id, expires_at) VALUES (:h, :org, :u, :s, :exp)",
+                   h=token_hash, org=ctx.org_id, u=ctx.user_id, s=session_id, exp=room.extension_token_expiry(ctx.calendar, now))
+    return token
+
+
 @router.post("/check-in", status_code=201)
 def check_in(body: CheckInIn, ctx: EitherCtx):
     ctx.require("room.self")
     db, cal, now = ctx.db, ctx.calendar, utcnow()
-    existing = room.open_session(db, ctx.user_id)
+    existing = room.open_session(db, ctx.user_id, lock=True)
     if existing is not None:
-        return ok({"session_id": existing["id"], "started_at": existing["started_at"], "presence": existing["presence"],
-                   "already_open": True})
+        reply = {"session_id": existing["id"], "started_at": existing["started_at"], "presence": existing["presence"], "already_open": True}
+        if body.device and body.device.kind == "chrome_extension" and ctx.via == "session":
+            # Checked in on the web first: the extension attaches to that session with a fresh token (earlier ones revoked).
+            db.execute("UPDATE ems.extension_tokens SET revoked_at = now() WHERE session_id = :s AND revoked_at IS NULL", s=existing["id"])
+            token = _issue_extension_token(ctx, existing["id"], now)
+            ctx.audit("room.extension_attached", "work_session", existing["id"])
+            reply.update(extension_token=token, heartbeat_seconds=HEARTBEAT_SECONDS,
+                         streaming_required=room.streaming_allowed(db, ctx.org, ctx.user_id),
+                         camera_allowed=room.camera_allowed(db, ctx.org, ctx.user_id))
+        return ok(reply)
     today = cal.local_date(now)
     if db.scalar("SELECT 1 FROM ems.leave_requests WHERE user_id = :u AND status = 'approved' AND period @> CAST(:d AS date)",
                  u=ctx.user_id, d=today):
@@ -133,9 +162,7 @@ def check_in(body: CheckInIn, ctx: EitherCtx):
         return ok({"session_id": existing["id"], "started_at": existing["started_at"], "presence": existing["presence"],
                    "already_open": True})
 
-    token, token_hash = new_token("ext")
-    db.execute("INSERT INTO ems.extension_tokens (token_hash, org_id, user_id, session_id, expires_at) VALUES (:h, :org, :u, :s, :exp)",
-               h=token_hash, org=ctx.org_id, u=ctx.user_id, s=session_id, exp=room.extension_token_expiry(cal, now))
+    token = _issue_extension_token(ctx, session_id, now)
     minutes_late = cal.minutes_late(now)
     streaming_required = room.streaming_allowed(db, ctx.org, ctx.user_id)
     ctx.audit("room.checked_in", "work_session", session_id)
@@ -143,7 +170,7 @@ def check_in(body: CheckInIn, ctx: EitherCtx):
     local = cal.local(now)
     return ok({"session_id": session_id, "started_at": now, "minutes_late": minutes_late, "presence": "active",
                "extension_token": token, "heartbeat_seconds": HEARTBEAT_SECONDS, "streaming_required": streaming_required,
-               "next": "start_screen_share" if streaming_required else "work"},
+               "camera_allowed": room.camera_allowed(db, ctx.org, ctx.user_id), "next": "start_screen_share" if streaming_required else "work"},
               f"Checked in at {local.strftime('%I:%M %p').lstrip('0')}.", status=201)
 
 
@@ -153,6 +180,7 @@ class HeartbeatIn(Body):
     sent_at: dt.datetime
     idle_state: Literal["active", "idle", "locked"]
     streaming: bool
+    camera: bool = False                     # the extension is publishing the webcam
     task_id: uuid.UUID | None = None
 
 
@@ -177,10 +205,11 @@ def heartbeat(body: HeartbeatIn, request: Request, ctx: ExtensionCtx):
                                            "from": previous, "to": new_presence})
     # The extension's report is honoured only when sharing is allowed right now.
     streaming = body.streaming and not on_break and room.streaming_allowed(db, ctx.org, ctx.user_id)
-    if streaming != session["streaming"]:
-        ctx.emit("room.stream_state", {"user_id": str(ctx.user_id), "session_id": str(session["id"]), "streaming": streaming})
-    db.execute("UPDATE ems.work_sessions SET last_heartbeat_at = :t, streaming = :s WHERE id = :id",
-               t=now, s=streaming, id=session["id"])
+    camera = body.camera and not on_break and room.camera_allowed(db, ctx.org, ctx.user_id)
+    if streaming != session["streaming"] or camera != session["camera"]:
+        ctx.emit("room.stream_state", {"user_id": str(ctx.user_id), "session_id": str(session["id"]), "streaming": streaming, "camera": camera})
+    db.execute("UPDATE ems.work_sessions SET last_heartbeat_at = :t, streaming = :s, camera = :c WHERE id = :id",
+               t=now, s=streaming, c=camera, id=session["id"])
     pending = db.one("SELECT id FROM ems.breaks WHERE session_id = :s AND status = 'requested' ORDER BY created_at DESC LIMIT 1",
                      s=session["id"])
     return ok({"presence": new_presence, "server_time": now, "next_heartbeat_seconds": HEARTBEAT_SECONDS,
@@ -249,7 +278,7 @@ def request_break(body: BreakIn, ctx: EitherCtx):
         raise ApiError("BREAK_ALREADY_ACTIVE", "You already have an active break.") from exc
     if within:
         room.change_presence(db, session, "on_break", session["current_task_id"], now)
-        db.execute("UPDATE ems.work_sessions SET streaming = false WHERE id = :s", s=session["id"])
+        db.execute("UPDATE ems.work_sessions SET streaming = false, camera = false WHERE id = :s", s=session["id"])
         _disconnect_viewers_of(ctx, ctx.user_id)
     ctx.audit("room.break_requested", "break", break_id)
     ctx.emit("room.break_requested", {"user_id": str(ctx.user_id), "break_id": str(break_id), "kind": body.kind,
@@ -259,6 +288,33 @@ def request_break(body: BreakIn, ctx: EitherCtx):
     return ok({"break_id": break_id, "status": "active" if within else "requested", "started_at": now if within else None,
                "approval": "auto_approved_by_policy" if within else "manager_required", "stream_paused": within},
               message, status=201)
+
+
+# ------------------------------------------------------------------------------------------------ break list (web)
+@router.get("/breaks")
+def list_breaks(ctx: SessionCtx, status: Literal["requested", "active", "ended", "rejected"] | None = None,
+                from_: Annotated[dt.date | None, Query(alias="from")] = None, to: Annotated[dt.date | None, Query()] = None):
+    """Break requests to decide (API-022) and the break log. Read-only. People holding leave.decide see their scope
+    (team or company); everyone else sees their own breaks."""
+    cal = ctx.calendar
+    to = to or cal.local_date()
+    from_ = from_ or to - dt.timedelta(days=6)
+    if from_ > to or (to - from_).days > 62:
+        raise invalid("Choose a date range of at most 62 days.", {"from": "Must be on or before 'to'."})
+    scope = ctx.scope("leave.decide")
+    users = None if scope == "all" else [*ctx.team_ids(), ctx.user_id] if scope == "team" else [ctx.user_id]
+    rows = ctx.db.all(
+        "SELECT b.id, b.user_id, u.name, b.kind, b.status, b.requested_minutes, b.started_at, b.ended_at, b.created_at FROM ems.breaks b "
+        "JOIN ems.users u ON u.id = b.user_id WHERE (CAST(:st AS text) IS NULL OR b.status = :st) "
+        "AND (CAST(:users AS uuid[]) IS NULL OR b.user_id = ANY(CAST(:users AS uuid[]))) AND b.created_at >= :s AND b.created_at < :e "
+        "ORDER BY b.created_at DESC LIMIT 500",
+        st=status, users=users, s=cal.day_bounds(from_)[0], e=cal.day_bounds(to)[1])
+
+    def minutes(r) -> int | None:
+        return int((r["ended_at"] - r["started_at"]).total_seconds() // 60) if r["ended_at"] and r["started_at"] else None
+    return ok({"items": [{**r, "minutes": minutes(r),
+                          "can_decide": r["status"] == "requested" and r["user_id"] != ctx.user_id and ctx.covers("leave.decide", r["user_id"])}
+                         for r in rows]})
 
 
 # ------------------------------------------------------------------------------------------------ API-022
@@ -287,7 +343,7 @@ def decide_break(break_id: uuid.UUID, body: BreakDecisionIn, ctx: SessionCtx):
         db.execute("UPDATE ems.breaks SET status = 'active', started_at = :t, decided_by = :me WHERE id = :b",
                    t=now, me=ctx.user_id, b=break_id)
         room.change_presence(db, session, "on_break", session["current_task_id"], now)
-        db.execute("UPDATE ems.work_sessions SET streaming = false WHERE id = :s", s=session["id"])
+        db.execute("UPDATE ems.work_sessions SET streaming = false, camera = false WHERE id = :s", s=session["id"])
         _disconnect_viewers_of(ctx, brk["user_id"])
     else:
         db.execute("UPDATE ems.breaks SET status = 'rejected', decided_by = :me WHERE id = :b", me=ctx.user_id, b=break_id)
@@ -325,6 +381,7 @@ def end_break(break_id: uuid.UUID, ctx: EitherCtx):
 # ------------------------------------------------------------------------------------------------ API-024
 class PublishTokenIn(Body):
     session_id: uuid.UUID
+    camera: bool = False                     # also allow publishing the webcam (needs the webcam opt-in)
 
 
 @router.post("/stream/publish-token")
@@ -336,14 +393,18 @@ def publish_token(body: PublishTokenIn, ctx: ExtensionCtx):
     if not room.has_current_consent(db, ctx.user_id, ctx.org["room_policy_version"]):
         raise ApiError("CONSENT_REQUIRED", "Accept the monitoring notice before sharing your screen.",
                        {"policy_version": ctx.org["room_policy_version"]})
+    if body.camera and not room.has_webcam_consent(db, ctx.user_id, ctx.org["room_policy_version"]):
+        raise ApiError("CONSENT_REQUIRED", "Opt in to the webcam in the monitoring notice before turning the camera on.",
+                       {"policy_version": ctx.org["room_policy_version"], "webcam": True})
     if room.active_break(db, ctx.user_id):
-        raise ApiError("ON_BREAK", "You are on a break. Screen sharing resumes when the break ends.")
-    token = livekit.publish_token(ctx.settings, ctx.org_id, ctx.user_id)
+        raise ApiError("ON_BREAK", "You are on a break. Sharing resumes when the break ends.")
+    token = livekit.publish_token(ctx.settings, ctx.org_id, ctx.user_id, camera=body.camera)
     ctx.audit("room.stream_started", "work_session", session["id"])
     ctx.emit("room.stream_state", {"user_id": str(ctx.user_id), "session_id": str(session["id"]), "streaming": "token_issued"})
     return ok({"livekit_url": ctx.settings.livekit_url, "token": token, "room": livekit.room_name(ctx.org_id, ctx.user_id),
                "identity": f"employee:{ctx.user_id}",
-               "grants": {"can_publish": True, "can_subscribe": False, "can_publish_data": False, "can_publish_sources": ["screen_share"]},
+               "grants": {"can_publish": True, "can_subscribe": False, "can_publish_data": False,
+                          "can_publish_sources": livekit.publish_sources(body.camera)},
                "expires_in_seconds": livekit.PUBLISH_TTL_SECONDS, "video": {"max_resolution": "1280x720", "max_fps": 5}})
 
 
@@ -357,7 +418,7 @@ def live_grid(ctx: SessionCtx, department: str | None = None,
     limit = clamp_limit(limit, LIVE_GRID_MAX)
     rows = db.all(
         "SELECT s.id, s.org_id, s.user_id, s.started_at, s.ended_at, s.state, s.current_task_id, s.last_heartbeat_at, s.presence, "
-        "s.streaming, u.name, m.department, t.title AS task_title, "
+        "s.streaming, s.camera, u.name, m.department, t.title AS task_title, "
         "(SELECT max(ended_at) FROM ems.presence_segments p WHERE p.session_id = s.id) AS last_change "
         "FROM ems.work_sessions s JOIN ems.memberships m ON m.user_id = s.user_id JOIN ems.users u ON u.id = s.user_id "
         "LEFT JOIN ems.tasks t ON t.id = s.current_task_id WHERE s.state = 'open' ORDER BY u.name, s.user_id")
@@ -372,11 +433,11 @@ def live_grid(ctx: SessionCtx, department: str | None = None,
         since = r["last_change"] or r["started_at"]
         if p == "offline" and r["presence"] != "offline":
             since = (r["last_heartbeat_at"] or r["started_at"]) + room.HEARTBEAT
-        stream = ("disabled" if not ctx.org["live_view_enabled"] else "paused" if p == "on_break"
-                  else "live" if r["streaming"] and p != "offline" else "off")
+        enabled = ctx.org["live_view_enabled"]
         items.append({"user_id": r["user_id"], "name": r["name"], "department": r["department"], "presence": p, "since": since,
                       "current_task": {"id": r["current_task_id"], "title": r["task_title"]} if r["current_task_id"] else None,
-                      "stream": stream, "minutes_late": cal.minutes_late(r["started_at"])})
+                      "stream": _media_state(enabled, p, r["streaming"]), "camera": _media_state(enabled, p, r["camera"]),
+                      "minutes_late": cal.minutes_late(r["started_at"])})
     on_leave = db.scalar("SELECT count(DISTINCT user_id) FROM ems.leave_requests WHERE status = 'approved' AND period @> CAST(:d AS date)",
                          d=today)
     start, end = cal.day_bounds(today)
@@ -414,23 +475,59 @@ def open_view(body: ViewIn, ctx: SessionCtx):
         raise denied("Live screen viewing is switched off for this company.")
     session = room.open_session(db, body.subject_user_id)
     state = _derived_presence(session, now) if session else "not_checked_in"
-    if session is None or not session["streaming"] or state in ("on_break", "offline"):
-        raise ApiError("STREAM_NOT_LIVE", f"{_first_name(subject['name'])} is not sharing right now (on break or not checked in).",
+    if session is None or not (session["streaming"] or session["camera"]) or state in ("on_break", "offline"):
+        raise ApiError("STREAM_NOT_LIVE", f"{_first_name(subject['name'])} is not live right now (on break, not sharing or not checked in).",
                        {"presence": state})
-    view_id = uuid.uuid4()
-    token = livekit.view_token(ctx.settings, ctx.org_id, body.subject_user_id, view_id)
-    db.execute("INSERT INTO ems.stream_views (id, org_id, viewer_id, subject_user_id, reason, started_at) "
-               "VALUES (:id, :org, :v, :s, :r, :t)", id=view_id, org=ctx.org_id, v=ctx.user_id, s=body.subject_user_id,
-               r=body.reason, t=now)
     viewer_name = db.scalar("SELECT name FROM ems.users WHERE id = :u", u=ctx.user_id)
-    # Written in this transaction (not by the worker) so the employee is told about every view that exists (G5).
-    ctx.notify([body.subject_user_id], "room.view_started", f"{viewer_name} is viewing your screen", "stream_view", view_id)
-    ctx.audit("room.stream_viewed", "stream_view", view_id, ["viewer_id", "subject_user_id", "reason"])
-    ctx.emit("room.view_started", {"view_id": str(view_id), "viewer_id": str(ctx.user_id), "subject_user_id": str(body.subject_user_id)})
-    return ok({"view_id": view_id, "livekit_url": ctx.settings.livekit_url, "token": token,
-               "room": livekit.room_name(ctx.org_id, body.subject_user_id),
-               "grants": {"can_publish": False, "can_subscribe": True, "can_publish_data": False},
+    view = _start_view(ctx, body.subject_user_id, body.reason, viewer_name, now)
+    return ok({**view, "livekit_url": ctx.settings.livekit_url, "grants": {"can_publish": False, "can_subscribe": True, "can_publish_data": False},
                "expires_in_seconds": livekit.VIEW_TTL_SECONDS, "subject_notified": True}, status=201)
+
+
+def _start_view(ctx: Ctx, subject_id: uuid.UUID, reason: str, viewer_name: str, now: dt.datetime) -> dict:
+    """One audited view of one employee: stream_views row, in-app notice, subscribe-only token for their room."""
+    view_id = uuid.uuid4()
+    token = livekit.view_token(ctx.settings, ctx.org_id, subject_id, view_id)
+    ctx.db.execute("INSERT INTO ems.stream_views (id, org_id, viewer_id, subject_user_id, reason, started_at) VALUES (:id, :org, :v, :s, :r, :t)",
+                   id=view_id, org=ctx.org_id, v=ctx.user_id, s=subject_id, r=reason, t=now)
+    # Written in this transaction (not by the worker) so the employee is told about every view that exists (G5).
+    ctx.notify([subject_id], "room.view_started", f"{viewer_name} is viewing you live: {reason}", "stream_view", view_id)
+    ctx.audit("room.stream_viewed", "stream_view", view_id, ["viewer_id", "subject_user_id", "reason"])
+    ctx.emit("room.view_started", {"view_id": str(view_id), "viewer_id": str(ctx.user_id), "subject_user_id": str(subject_id)})
+    return {"view_id": view_id, "token": token, "room": livekit.room_name(ctx.org_id, subject_id)}
+
+
+# ------------------------------------------------------------------------------------------------ video grid (web)
+GRID_MAX = 48
+
+
+class GridViewIn(Body):
+    reason: str = Field(min_length=3, max_length=200)
+    subject_user_ids: list[uuid.UUID] | None = Field(default=None, max_length=GRID_MAX)
+
+
+@router.post("/stream/view-grid", status_code=201)
+def open_grid(body: GridViewIn, ctx: SessionCtx):
+    """CEO/COO video wall: one reason opens a view of everyone who is live right now (webcam and/or screen). Each person
+    gets their own logged view, their own notice and a subscribe-only token for their own room, exactly as API-026."""
+    ctx.require("room.view_live", "Only the CEO and COO can open the live room.")
+    db, now = ctx.db, utcnow()
+    if not ctx.org["live_view_enabled"]:
+        raise denied("Live viewing is switched off for this company.")
+    rows = db.all("SELECT s.user_id, s.presence, s.last_heartbeat_at, s.started_at, s.streaming, s.camera, u.name "
+                  "FROM ems.work_sessions s JOIN ems.users u ON u.id = s.user_id JOIN ems.memberships m ON m.user_id = s.user_id "
+                  "WHERE s.state = 'open' AND m.status = 'active' AND (s.streaming OR s.camera) AND s.user_id <> :me "
+                  "AND (CAST(:ids AS uuid[]) IS NULL OR s.user_id = ANY(CAST(:ids AS uuid[]))) ORDER BY u.name LIMIT :lim",
+                  me=ctx.user_id, ids=body.subject_user_ids, lim=GRID_MAX)
+    viewer_name = db.scalar("SELECT name FROM ems.users WHERE id = :u", u=ctx.user_id)
+    items = []
+    for s in rows:
+        if _derived_presence(s, now) in ("on_break", "offline"):
+            continue
+        view = _start_view(ctx, s["user_id"], body.reason, viewer_name, now)
+        items.append({**view, "subject_user_id": s["user_id"], "name": s["name"], "camera": s["camera"], "screen": s["streaming"]})
+    return ok({"livekit_url": ctx.settings.livekit_url, "expires_in_seconds": livekit.VIEW_TTL_SECONDS, "items": items,
+               "subjects_notified": len(items)}, status=201)
 
 
 # ------------------------------------------------------------------------------------------------ API-027

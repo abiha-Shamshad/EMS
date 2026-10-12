@@ -1,4 +1,4 @@
-"""Integration test fixtures: a disposable PostgreSQL database built from db/001..005, the API as ems_app, the worker as
+"""Integration test fixtures: a disposable PostgreSQL database built from db/001..006, the API as ems_app, the worker as
 ems_worker. Never point TEST_ADMIN_DATABASE_URL at a database with real data.
 
     TEST_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres pytest
@@ -44,7 +44,7 @@ def database():
         conn.execute(f'CREATE DATABASE "{name}"')
     with psycopg.connect(_with(ADMIN_URL, db=name), autocommit=True) as conn:
         for f in ("001_ems_schema.sql", "002_ems_settings_tokens.sql", "003_ems_platform_gaps.sql", "004_ems_pilot_fixes.sql",
-                  "005_ems_automation.sql"):
+                  "005_ems_automation.sql", "006_ems_webcam.sql"):
             conn.execute((ROOT / "db" / f).read_text(encoding="utf-8"))
     yield {"app": _with(ADMIN_URL, user="ems_app", db=name, driver="postgresql+psycopg"),
            "worker": _with(ADMIN_URL, user="ems_worker", db=name, driver="postgresql+psycopg"),

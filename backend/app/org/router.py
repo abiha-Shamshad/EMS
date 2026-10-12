@@ -47,6 +47,13 @@ def _advance_setup(ctx_db, org: dict, target: str) -> str:
     return org["setup_state"]
 
 
+# ------------------------------------------------------------------------------------------------ company settings (web)
+@router.get("/org")
+def read_org(ctx: SessionCtx):
+    """The current company settings with their version, for the setup and settings screens (API-010 needs expected_version)."""
+    return ok({**ctx.org, "next_step": NEXT_STEP[ctx.org["setup_state"]]})
+
+
 # ------------------------------------------------------------------------------------------------ API-010
 class WorkHours(Body):
     days: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(min_length=1, max_length=7)
